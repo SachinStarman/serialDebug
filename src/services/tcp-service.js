@@ -18,8 +18,10 @@ class TcpService {
 
     return new Promise((resolve, reject) => {
       this.client = new net.Socket();
+      let settled = false;
 
       this.client.connect(parseInt(config.port), config.host, () => {
+        settled = true;
         resolve();
       });
 
@@ -30,7 +32,7 @@ class TcpService {
 
       this.client.on('error', (err) => {
         this.errorCallbacks.forEach(cb => cb(err));
-        reject(err);
+        if (!settled) { settled = true; reject(err); }
       });
 
       this.client.on('close', () => {

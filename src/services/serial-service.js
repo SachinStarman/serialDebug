@@ -60,7 +60,11 @@ class SerialService {
 
         this.port.on('close', () => {
           this.port = null;
-          this.closeCallbacks.forEach(cb => cb());
+          const cbs = [...this.closeCallbacks];
+          this.dataCallbacks = [];
+          this.errorCallbacks = [];
+          this.closeCallbacks = [];
+          cbs.forEach(cb => cb());
         });
 
         resolve();
@@ -73,6 +77,9 @@ class SerialService {
     return new Promise((resolve, reject) => {
       if (!this.port.isOpen) {
         this.port = null;
+        this.dataCallbacks = [];
+        this.errorCallbacks = [];
+        this.closeCallbacks = [];
         resolve();
         return;
       }

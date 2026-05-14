@@ -43,12 +43,15 @@ class UdpService {
 
   async close() {
     if (this.socket) {
+      const sock = this.socket;
+      this.socket = null;
+      this.dataCallbacks = [];
       return new Promise((resolve) => {
-        this.socket.close(() => {
-          this.socket = null;
-          this.dataCallbacks = [];
-          resolve();
-        });
+        try {
+          sock.close(() => resolve());
+        } catch (e) {
+          resolve(); // Already closed
+        }
       });
     }
   }

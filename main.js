@@ -121,6 +121,10 @@ function setupIPC() {
   ipcMain.handle('serial:connect', async (event, config) => {
     try {
       await serialService.connect(config);
+      // Clear old callbacks to prevent accumulation on reconnect
+      serialService.dataCallbacks = [];
+      serialService.errorCallbacks = [];
+      serialService.closeCallbacks = [];
       serialService.onData((data) => {
         mainWindow?.webContents.send('serial:data', data);
       });
@@ -282,6 +286,9 @@ function setupIPC() {
   // ──── Script Engine IPC ────
   ipcMain.handle('script:run', async (event, code) => {
     try {
+      // Clear old callbacks to prevent accumulation across runs
+      scriptEngine.sendCallbacks = [];
+      scriptEngine.logCallbacks = [];
       scriptEngine.onSend((data) => {
         mainWindow?.webContents.send('script:send', data);
       });

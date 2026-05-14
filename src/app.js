@@ -992,86 +992,8 @@ function initWaveformPanel() {
 
 function initChart() {
   const ctx = document.getElementById('waveform-canvas').getContext('2d');
-
-  // Chart imported at top of file via require('chart.js/auto')
-
-  waveformChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(17, 24, 39, 0.9)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#94a3b8',
-          borderColor: 'rgba(255,255,255,0.1)',
-          borderWidth: 1,
-          padding: 8,
-          usePointStyle: true,
-          boxWidth: 8,
-          boxHeight: 8,
-          titleFont: { family: "'Inter', sans-serif", size: 11 },
-          bodyFont: { family: "'JetBrains Mono', monospace", size: 11 },
-        },
-      },
-      scales: {
-        x: {
-          type: 'category',
-          display: true,
-          grid: {
-            color: 'rgba(255,255,255,0.04)',
-            drawTicks: false,
-          },
-          ticks: {
-            color: '#64748b',
-            font: { family: "'JetBrains Mono', monospace", size: 9 },
-            maxRotation: 0,
-            maxTicksLimit: 10,
-          },
-        },
-        xScope: {
-          type: 'linear',
-          display: false,
-          grid: {
-            color: 'rgba(255,255,255,0.04)',
-            drawTicks: false,
-          },
-          ticks: {
-            color: '#64748b',
-            font: { family: "'JetBrains Mono', monospace", size: 9 },
-            maxRotation: 0,
-            maxTicksLimit: 11,
-          },
-        },
-        y: {
-          display: true,
-          grid: {
-            color: 'rgba(255,255,255,0.04)',
-            drawTicks: false,
-          },
-          ticks: {
-            color: '#64748b',
-            font: { family: "'JetBrains Mono', monospace", size: 10 },
-          },
-        },
-      },
-      elements: {
-        point: { radius: 0 },
-        line: { borderWidth: 1.5, tension: 0.1 },
-      },
-    },
-  });
+  // Reuse shared chart config (defined in getChartConfig()) to avoid duplication
+  waveformChart = new Chart(ctx, getChartConfig());
 
   window.waveformChart = waveformChart;
 
@@ -2302,7 +2224,7 @@ function saveState() {
     const uiElements = [
       'conn-mode', 'serial-baud', 'cfg-data-bits', 'cfg-parity', 'cfg-stop-bits', 'cfg-flow-control',
       'tcp-host', 'tcp-port', 'udp-local-port', 'udp-remote-host', 'udp-remote-port',
-      'display-mode', 'send-mode', 'disp-encoding', 'send-encoding', 'auto-scroll',
+      'display-mode', 'send-mode', 'display-encoding', 'send-encoding', 'auto-scroll',
       'auto-frame-break', 'frame-break-ms', 'auto-reconnect', 'show-timestamp',
       'waveform-enabled', 'waveform-mode', 'waveform-points', 'waveform-data-rate', 'scope-timing-mode', 'waveform-label-mode',
       'data-sampling', 'data-sample-rate',
@@ -2324,8 +2246,11 @@ function saveState() {
       }
     });
 
+    // Sparse format: only serialize non-null commands to reduce localStorage bloat
+    const sparseCommands = {};
+    state.commands.forEach((cmd, i) => { if (cmd) sparseCommands[i] = cmd; });
     const data = {
-      commands: state.commands,
+      commands: sparseCommands,
       commandRepeatConfigs: state.commandRepeatConfigs,
       uiState: uiState
     };
@@ -2341,7 +2266,16 @@ function loadSavedState() {
     if (saved) {
       const data = JSON.parse(saved);
       if (data.commands) {
-        state.commands = data.commands;
+        if (Array.isArray(data.commands)) {
+          // Legacy array format
+          state.commands = data.commands;
+        } else {
+          // Sparse object format
+          state.commands = new Array(600).fill(null);
+          Object.entries(data.commands).forEach(([i, cmd]) => {
+            state.commands[parseInt(i)] = cmd;
+          });
+        }
         // Ensure 600 slots
         while (state.commands.length < 600) state.commands.push(null);
       }
@@ -2377,13 +2311,15 @@ function loadSavedState() {
 // ══════════════════════════════════════════════════════════
 // UTILITY FUNCTIONS
 // ══════════════════════════════════════════════════════════
+// Shared TextDecoder instance for UTF-8 (avoid recreating per call)
+const _utf8Decoder = new TextDecoder('utf-8');
+
 function bufferToString(bytes, encoding = 'UTF-8') {
-  // For renderer-side quick decode (ASCII / UTF-8 only — full decode via IPC)
-  if (encoding === 'ASCII' || encoding === 'UTF-8') {
+  if (encoding === 'ASCII') {
     return bytes.map(b => String.fromCharCode(b)).join('');
   }
-  // For other encodings, we'd need to call the main process
-  return bytes.map(b => String.fromCharCode(b)).join('');
+  // Proper multi-byte UTF-8 decoding (handles emoji, CJK, accented chars)
+  return _utf8Decoder.decode(new Uint8Array(bytes));
 }
 
 function stringToBytes(str) {
@@ -2395,9 +2331,7 @@ function stringToBytes(str) {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function formatBytes(bytes) {
@@ -2816,6 +2750,9 @@ function startAutoReconnect() {
       stopAutoReconnect();
       return;
     }
+    // Guard against concurrent reconnection attempts
+    if (state._reconnecting) return;
+    state._reconnecting = true;
     try {
       const mode = state.connectionMode;
       if (mode === 'serial') {
@@ -2834,6 +2771,8 @@ function startAutoReconnect() {
       }
     } catch (e) {
       // Silently retry
+    } finally {
+      state._reconnecting = false;
     }
   }, 3000);
 }
@@ -3058,6 +2997,9 @@ function saveMathChannel() {
   showToast(`Math channel "${name}" saved`, 'success');
 }
 
+// Cache compiled math functions to avoid recompiling on every data point
+const _mathFnCache = {};
+
 function evaluateMathExpr(expr, channels, t) {
   // Build a safe context with channel values and math functions
   const ctx = {
@@ -3080,8 +3022,19 @@ function evaluateMathExpr(expr, channels, t) {
   };
   const keys = Object.keys(ctx);
   const vals = Object.values(ctx);
+
+  // Cache key: expression + parameter signature
+  const cacheKey = expr + '|' + keys.join(',');
+  let fn = _mathFnCache[cacheKey];
+  if (!fn) {
+    try {
+      fn = new Function(...keys, `return (${expr});`);
+      _mathFnCache[cacheKey] = fn;
+    } catch (e) {
+      return null;
+    }
+  }
   try {
-    const fn = new Function(...keys, `return (${expr});`);
     const result = fn(...vals);
     return typeof result === 'number' && isFinite(result) ? result : null;
   } catch (e) {
