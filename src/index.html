@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Serial Debug Assistant Pro</title>
+  <link rel="stylesheet" href="index.css">
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+</head>
+<body>
+
+  <!-- ════ TITLE BAR ════ -->
+  <div class="titlebar">
+    <div class="titlebar__icon">
+      <img src="../assets/icon.png" alt="App Icon" style="width: 100%; height: 100%; object-fit: contain;">
+    </div>
+    <div class="titlebar__title">Serial Debug Assistant Pro</div>
+    <div class="titlebar__spacer"></div>
+    <div class="titlebar__controls">
+      <button class="titlebar__btn" id="btn-minimize" title="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path fill="currentColor" d="M 0,5 10,5 10,6 0,6 Z"/></svg>
+      </button>
+      <button class="titlebar__btn" id="btn-maximize" title="Maximize">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path fill="currentColor" d="M 0,0 0,10 10,10 10,0 Z M 1,1 9,1 9,9 1,9 Z"/></svg>
+      </button>
+      <button class="titlebar__btn titlebar__btn--close" id="btn-close" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path fill="currentColor" d="M 0,0 1,0 5,4 9,0 10,0 10,1 6,5 10,9 10,10 9,10 5,6 1,10 0,10 0,9 4,5 0,1 Z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ════ MAIN CONTAINER ════ -->
+  <div class="app-container">
+
+    <!-- ── Top Tab Bar ── -->
+    <nav class="sidebar">
+      <button class="sidebar__btn active" data-panel="main" id="nav-main" title="Monitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>Monitor</span>
+      </button>
+      <button class="sidebar__btn" data-panel="waveform" id="nav-waveform" title="Waveform">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+        <span>Wave</span>
+      </button>
+      <button class="sidebar__btn" data-panel="commands" id="nav-commands" title="Commands">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+        <span>Cmds</span>
+      </button>
+      <button class="sidebar__btn" data-panel="sequence" id="nav-sequence" title="Sequence">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg>
+        <span>Seq</span>
+      </button>
+      <button class="sidebar__btn" data-panel="script" id="nav-script" title="Script">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>
+        <span>Script</span>
+      </button>
+      <button class="sidebar__btn" data-panel="terminal" id="nav-terminal" title="Terminal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span>Term</span>
+      </button>
+
+      <!-- Spacer pushes remaining to right -->
+      <div style="flex:1"></div>
+
+      <!-- Split View -->
+      <button class="sidebar__btn sidebar__btn--tool" id="btn-split-toggle" title="Split View">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+        <span>Split</span>
+      </button>
+
+      <div class="sidebar__divider"></div>
+
+      <!-- Settings & Guide (right-aligned) -->
+      <button class="sidebar__btn" data-panel="settings" id="nav-settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+      <button class="sidebar__btn" data-panel="guide" id="nav-guide" title="User Guide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Guide</span>
+      </button>
+    </nav>
+
+    <!-- ── Main Row ── -->
+    <div class="main-row">
+
+      <!-- ── Left Panel ── -->
+      <aside class="left-panel">
+        <!-- Connection -->
+        <div class="left-panel__section">
+          <h3 class="left-panel__title">CONNECTION</h3>
+          <div class="connection-bar" id="connection-bar">
+            <div class="status-row"><div class="status-dot" id="status-dot"></div><span class="status-label">Disconnected</span></div>
+            <div class="form-field"><label class="form-field__label">Mode</label><select id="conn-mode"><option value="serial">Serial</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="udp">UDP</option></select></div>
+            <div id="serial-fields">
+              <div class="form-field"><label class="form-field__label">Port <button class="btn btn-ghost btn-icon btn-xs" id="btn-refresh-ports" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></label><select id="serial-port"><option value="">Select port...</option></select></div>
+              <div class="form-field"><label class="form-field__label">Baud Rate</label><select id="serial-baud"><option value="9600">9600</option><option value="19200">19200</option><option value="38400">38400</option><option value="57600">57600</option><option value="115200" selected>115200</option><option value="230400">230400</option><option value="460800">460800</option><option value="921600">921600</option><option value="custom">Custom...</option></select><input type="number" id="serial-baud-custom" style="display:none" placeholder="Baud rate"></div>
+              <div class="form-field"><label class="form-field__label">Data Bits</label><select id="cfg-data-bits"><option value="7">7</option><option value="8" selected>8</option></select></div>
+              <div class="form-field"><label class="form-field__label">Parity</label><select id="cfg-parity"><option value="none" selected>None</option><option value="even">Even</option><option value="odd">Odd</option></select></div>
+              <div class="form-field"><label class="form-field__label">Stop Bits</label><select id="cfg-stop-bits"><option value="1" selected>1</option><option value="2">2</option></select></div>
+              <div class="form-field"><label class="form-field__label">Flow Control</label><select id="cfg-flow-control"><option value="none" selected>None</option><option value="rtscts">RTS/CTS</option><option value="xon/xoff">XON/XOFF</option></select></div>
+            </div>
+            <div class="hidden" id="tcp-fields">
+              <div class="form-field"><label class="form-field__label">Host</label><input type="text" id="tcp-host" value="127.0.0.1"></div>
+              <div class="form-field"><label class="form-field__label">Port</label><input type="number" id="tcp-port" value="8080"></div>
+            </div>
+            <div class="hidden" id="udp-fields">
+              <div class="form-field"><label class="form-field__label">Local Port</label><input type="number" id="udp-local-port" value="9000"></div>
+              <div class="form-field"><label class="form-field__label">Remote Host</label><input type="text" id="udp-remote-host" value="127.0.0.1"></div>
+              <div class="form-field"><label class="form-field__label">Remote Port</label><input type="number" id="udp-remote-port" value="9001"></div>
+            </div>
+            <button class="btn btn-success btn-block" id="btn-connect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Connect
+            </button>
+            <div class="tool-row" style="margin-top:4px"><label class="toggle-switch"><input type="checkbox" id="auto-reconnect"><span class="toggle-switch__track"></span></label><span class="text-sm">Auto Reconnect</span></div>
+          </div>
+        </div>
+
+        <!-- Panel-specific tools -->
+        <div class="panel-tools" data-for="main" id="tools-main">
+          <div class="left-panel__section"><h3 class="left-panel__title">RECEIVE SETTINGS</h3>
+            <div class="tool-group">
+              <div class="tool-row"><div class="segmented segmented--full" id="display-mode"><button class="segmented__btn active" data-mode="string">String</button><button class="segmented__btn" data-mode="hex">HEX</button><button class="segmented__btn" data-mode="both">Both</button></div></div>
+              <div class="form-field"><label class="form-field__label">Encoding</label><select id="display-encoding"><option value="UTF-8">UTF-8</option><option value="ASCII">ASCII</option><option value="GB2312">GB2312</option><option value="GBK">GBK</option><option value="BIG5">BIG5</option><option value="Shift_JIS">Shift_JIS</option></select></div>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="auto-frame-break" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Frame Break</span><input type="number" id="frame-break-ms" style="width:45px" value="50" min="1" max="5000"><span class="text-xs text-muted">ms</span></div>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="auto-scroll" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Auto scroll</span></div>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="show-timestamp" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Timestamp</span></div>
+              <div class="tool-row"><span class="count-badge" id="rx-count">RX: <span>0</span></span><span class="count-badge" id="tx-count">TX: <span>0</span></span></div>
+              <div class="tool-row"><button class="btn btn-ghost btn-sm btn-block" id="btn-monitor-pause"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause</button></div>
+              <div class="tool-row"><button class="btn btn-ghost btn-sm btn-block" id="btn-save-data">Save data</button></div>
+              <div class="tool-row"><button class="btn btn-ghost btn-sm btn-block" id="btn-clear-data">Clear data</button></div>
+            </div>
+          </div>
+          <div class="left-panel__section"><h3 class="left-panel__title">SEND SETTINGS</h3>
+            <div class="tool-group">
+              <div class="tool-row"><div class="segmented segmented--full" id="send-mode"><button class="segmented__btn active" data-mode="string">String</button><button class="segmented__btn" data-mode="hex">HEX</button></div></div>
+              <div class="form-field"><label class="form-field__label">Encoding</label><select id="send-encoding"><option value="UTF-8">UTF-8</option><option value="ASCII">ASCII</option><option value="GB2312">GB2312</option><option value="GBK">GBK</option></select></div>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="send-newline" checked><span class="toggle-switch__track"></span></label><span class="text-sm">\\n</span><label class="toggle-switch"><input type="checkbox" id="send-cr"><span class="toggle-switch__track"></span></label><span class="text-sm">\\r</span></div>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="send-repeat"><span class="toggle-switch__track"></span></label><span class="text-sm">Repeat</span><input type="number" id="send-repeat-ms" style="width:50px" value="1000" min="10"><span class="text-xs text-muted">ms</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-tools hidden" data-for="waveform" id="tools-waveform">
+          <div class="left-panel__section"><h3 class="left-panel__title">WAVEFORM</h3>
+            <div class="tool-group">
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="waveform-enabled" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Enabled</span></div>
+              <div class="form-field"><label class="form-field__label">Mode</label><div class="segmented segmented--full" id="waveform-mode"><button class="segmented__btn active" data-mode="plotter">Plotter</button><button class="segmented__btn" data-mode="scope">Scope</button></div></div>
+              <div class="form-field" id="plotter-controls"><label class="form-field__label">Points</label><input type="number" id="waveform-points" value="500" min="20" max="5000" step="10"></div>
+              <div class="form-field"><label class="form-field__label" title="Scope time-axis mode: Auto uses real timestamps, Manual uses your defined data rate">Timing</label><div class="segmented segmented--full" id="scope-timing-mode"><button class="segmented__btn active" data-mode="auto">Auto</button><button class="segmented__btn" data-mode="manual">Manual</button></div></div>
+              <div class="form-field" id="data-rate-field" style="display:none"><label class="form-field__label" title="Hardware data rate: Milliseconds per data point">Data Rate</label><input type="number" id="waveform-data-rate" value="1.0" min="0.1" step="0.5" title="Milliseconds per point (uniform spacing in scope mode)"><span class="text-xs text-muted" style="margin-left:4px">ms/pt</span></div>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-pause">Pause</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-clear">Clear</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-screenshot">Screenshot</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-config">Channels</button>
+              <div class="tool-row" style="margin-top:4px"><label class="toggle-switch"><input type="checkbox" id="data-sampling"><span class="toggle-switch__track"></span></label><span class="text-sm">Sample every</span><input type="number" id="data-sample-rate" style="width:40px" value="2" min="2" max="100"><span class="text-xs text-muted">pts</span></div>
+            </div>
+          </div>
+          <div class="left-panel__section"><h3 class="left-panel__title">MATH CHANNELS</h3>
+            <div class="tool-group">
+              <div id="math-channels-list"></div>
+              <button class="btn btn-outline btn-sm btn-block" id="btn-math-add">+ Add Math Channel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-tools hidden" data-for="commands" id="tools-commands">
+          <div class="left-panel__section"><h3 class="left-panel__title">COMMANDS</h3>
+            <div class="tool-group">
+              <div class="form-field"><label class="form-field__label">Page</label><select id="cmd-page"></select></div>
+              <span class="text-sm text-muted" id="cmd-page-info" style="padding:0 0 4px">1-20 of 600</span>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-cmd-import">Import</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-cmd-export">Export</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-tools hidden" data-for="sequence" id="tools-sequence">
+          <div class="left-panel__section"><h3 class="left-panel__title">SEQUENCE</h3>
+            <div class="tool-group">
+              <button class="btn btn-success btn-sm btn-block" id="btn-seq-run">Run All</button>
+              <button class="btn btn-danger btn-sm btn-block" id="btn-seq-stop">Stop</button>
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="seq-loop"><span class="toggle-switch__track"></span></label><span class="text-sm">Loop</span></div>
+              <div class="form-field"><label class="form-field__label">Default Delay</label><div class="tool-row" style="gap:4px"><input type="number" id="seq-default-delay" value="100" min="0" max="60000"><span class="text-xs text-muted">ms</span></div></div>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-seq-add">Add Command</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-seq-clear">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-tools hidden" data-for="script" id="tools-script">
+          <div class="left-panel__section"><h3 class="left-panel__title">SCRIPT</h3>
+            <div class="tool-group">
+              <button class="btn btn-success btn-sm btn-block" id="btn-script-run">Run</button>
+              <button class="btn btn-danger btn-sm btn-block" id="btn-script-stop">Stop</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-script-clear-console">Clear Console</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-tools hidden" data-for="terminal" id="tools-terminal">
+          <div class="left-panel__section"><h3 class="left-panel__title">TERMINAL</h3>
+            <div class="tool-group">
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="terminal-echo"><span class="toggle-switch__track"></span></label><span class="text-sm">Local Echo</span></div>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-terminal-clear">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- No tools for settings/guide (self-contained) -->
+        <div class="panel-tools hidden" data-for="settings"></div>
+        <div class="panel-tools hidden" data-for="guide"></div>
+      </aside>
+
+      <!-- ── Content Area ── -->
+      <div class="content" id="content-area">
+        <!-- Primary pane -->
+        <div class="split-pane" id="split-primary">
+
+          <!-- PANEL: MONITOR -->
+          <div class="panel active" id="panel-main">
+            <div class="main-view">
+              <!-- Performance Warning Bar -->
+              <div class="perf-warning-bar hidden" id="perf-warning-bar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>High data rate detected (<span id="perf-data-rate">0/s</span>). Consider enabling data sampling in settings.</span>
+              </div>
+              <!-- Search Bar -->
+              <div class="search-bar" id="search-bar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Search... (Ctrl+F)" class="search-input">
+                <label class="search-filter"><input type="checkbox" id="search-filter-rx" checked><span class="search-filter__chip search-filter__chip--rx">RX</span></label>
+                <label class="search-filter"><input type="checkbox" id="search-filter-tx" checked><span class="search-filter__chip search-filter__chip--tx">TX</span></label>
+                <button class="btn btn-ghost btn-xs" id="search-clear" title="Clear search">✕</button>
+              </div>
+              <div class="data-display__content" id="data-content">
+                <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="margin:0 auto 12px; display:block; opacity:0.3"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  <p style="font-size:13px;">Connect to a serial port, TCP, or UDP socket to start monitoring.</p>
+                </div>
+              </div>
+              <div class="send-panel">
+                <div class="send-panel__row">
+                  <textarea id="send-input" class="send-panel__input" placeholder="Type data to send... (↑↓ for history, Shift+Enter for new line)" rows="1" style="flex:1"></textarea>
+                  <div class="send-btn-group">
+                    <button class="btn btn-primary" id="btn-send">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send
+                    </button>
+                    <button class="btn btn-primary send-history-toggle" id="btn-send-history" title="Send history">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <!-- Send History Dropdown -->
+                <div class="send-history-dropdown hidden" id="send-history-dropdown">
+                  <div class="send-history-header">
+                    <span class="text-sm">Send History (last 100)</span>
+                    <button class="btn btn-ghost btn-xs" id="btn-history-clear" title="Clear history">Clear</button>
+                  </div>
+                  <div class="send-history-items" id="send-history-items">
+                    <div class="send-history-empty text-sm text-muted" style="padding:12px;text-align:center">No history yet</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL: WAVEFORM -->
+          <div class="panel" id="panel-waveform">
+            <div class="waveform-container">
+              <div class="waveform-toolbar">
+                <span class="text-xs text-muted">Labels:</span>
+                <select id="waveform-label-mode" style="width:auto; height:22px; font-size:10px; padding:0 20px 0 6px;">
+                  <option value="channel">CH#</option>
+                  <option value="data">Data Label</option>
+                  <option value="custom">Custom</option>
+                </select>
+                <div class="waveform-legend" id="waveform-legend"></div>
+              </div>
+              <div class="waveform-split-root" id="waveform-split-root" style="display:flex; flex:1; flex-direction:row; overflow:hidden; position:relative;">
+                <!-- View 0 (default) — legend + scale controls added by JS -->
+                <div class="waveform-view" id="waveform-view-0" data-view-id="0" style="flex:1; display:flex; flex-direction:column; position:relative; min-width:80px; min-height:60px;">
+                  <div class="waveform-chart-wrapper">
+                    <div class="waveform-container__chart" id="waveform-chart-area"><canvas id="waveform-canvas"></canvas></div>
+                  </div>
+                </div>
+              </div>
+              <!-- Wave Send Panel -->
+              <div class="send-panel wave-send-panel">
+                <div class="send-panel__row">
+                  <textarea id="wave-send-input" class="send-panel__input" placeholder="Type data to send... (↑↓ for history)" rows="1" style="flex:1"></textarea>
+                  <button class="btn btn-primary" id="btn-wave-send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send
+                  </button>
+                </div>
+              </div>
+              <!-- Waveform Right-Click Context Menu -->
+              <div class="wave-ctx-menu hidden" id="wave-ctx-menu">
+                <div class="wave-ctx-menu__item" data-action="split-h">⬌ Split Horizontally</div>
+                <div class="wave-ctx-menu__item" data-action="split-v">⬍ Split Vertically</div>
+                <div class="wave-ctx-menu__item" data-action="close-view">✕ Close This View</div>
+                <div class="wave-ctx-menu__sep"></div>
+                <div class="wave-ctx-menu__item" data-action="screenshot-view">📷 Screenshot This View</div>
+                <div class="wave-ctx-menu__item" data-action="screenshot-all">🖼 Screenshot All Views</div>
+              </div>
+              <div class="channel-config hidden" id="channel-config">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid var(--border-strong);">
+                  <span class="text-xs font-semibold">Channel Settings</span>
+                  <button class="btn btn-ghost btn-sm" id="btn-close-channel-config" style="padding:4px;" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <div id="channel-config-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL: COMMANDS -->
+          <div class="panel" id="panel-commands">
+            <div class="command-grid" id="command-grid"></div>
+            <div class="macro-listener-area">
+              <span class="text-xs text-muted">Macro Listener:</span>
+              <input type="text" id="macro-listener-box" class="macro-listener-box" placeholder="Click to activate macro keys" readonly>
+            </div>
+          </div>
+
+          <!-- PANEL: SEQUENCE -->
+          <div class="panel" id="panel-sequence">
+            <div class="command-list" id="seq-list"><div class="command-list__items" id="seq-items">
+              <div style="text-align:center; padding:40px; color:var(--text-muted);"><p style="font-size:13px;">No commands in sequence.</p></div>
+            </div></div>
+          </div>
+
+          <!-- PANEL: SCRIPT -->
+          <div class="panel" id="panel-script">
+            <div class="script-editor">
+              <textarea class="script-editor__code" id="script-code" spellcheck="false" placeholder="// send(string), sendHex(hex), onData(fn), log()&#10;// Example: send('Hello\\n');"></textarea>
+              <div class="script-console-header">Console Output</div>
+              <div class="script-editor__console" id="script-console">
+                <div class="script-log-entry" style="color:var(--text-muted)">Script console ready.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL: TERMINAL -->
+          <div class="panel" id="panel-terminal"><div class="terminal-container" id="terminal-container"></div></div>
+
+          <!-- PANEL: SETTINGS -->
+          <div class="panel" id="panel-settings">
+            <div class="settings-scroll">
+              <div class="settings-section">
+                <h2 class="settings-section__title">Theme</h2>
+                <div class="form-field" style="margin-bottom:12px">
+                  <label class="form-field__label">Preset</label>
+                  <select id="theme-preset">
+                    <option value="default">Default Dark</option>
+                    <option value="dracula">Dracula</option>
+                    <option value="monokai">Monokai Pro</option>
+                    <option value="nord">Nord</option>
+                    <option value="onedark">One Dark</option>
+                    <option value="synthwave">Synthwave '84</option>
+                    <option value="solarized">Solarized Dark</option>
+                    <option value="space">James Webb Space</option>
+                    <option value="hacker">Matrix Hacker</option>
+                    <option value="rainbow">Rainbow Delight</option>
+                    <option value="neon">Neon Nights</option>
+                    <option value="custom">Custom...</option>
+                  </select>
+                </div>
+                <div id="custom-theme-editor" class="hidden">
+                  <h3 class="settings-section__subtitle">Custom Theme Editor</h3>
+                  <div class="theme-grid">
+                    <div class="theme-color-row"><label>Background</label><input type="color" class="theme-color" data-var="--bg-primary" value="#0a0e1a"></div>
+                    <div class="theme-color-row"><label>Surface</label><input type="color" class="theme-color" data-var="--bg-secondary" value="#111827"></div>
+                    <div class="theme-color-row"><label>Elevated</label><input type="color" class="theme-color" data-var="--bg-tertiary" value="#1a2235"></div>
+                    <div class="theme-color-row"><label>Accent</label><input type="color" class="theme-color" data-var="--accent" value="#6366f1"></div>
+                    <div class="theme-color-row"><label>Text</label><input type="color" class="theme-color" data-var="--text-primary" value="#f1f5f9"></div>
+                    <div class="theme-color-row"><label>Text Muted</label><input type="color" class="theme-color" data-var="--text-secondary" value="#94a3b8"></div>
+                    <div class="theme-color-row"><label>Success</label><input type="color" class="theme-color" data-var="--success" value="#22c55e"></div>
+                    <div class="theme-color-row"><label>Danger</label><input type="color" class="theme-color" data-var="--danger" value="#ef4444"></div>
+                    <div class="theme-color-row"><label>Warning</label><input type="color" class="theme-color" data-var="--warning" value="#f59e0b"></div>
+                    <div class="theme-color-row"><label>Info</label><input type="color" class="theme-color" data-var="--info" value="#06b6d4"></div>
+                  </div>
+                  <div class="form-field" style="margin-top:8px">
+                    <label class="form-field__label">Theme Name</label>
+                    <input type="text" id="custom-theme-name" placeholder="My custom theme" value="My Theme">
+                  </div>
+                  <button class="btn btn-primary btn-sm btn-block" id="btn-theme-save" style="margin-top:8px">Save Custom Theme</button>
+                </div>
+                <div style="display:flex; gap:6px; margin-top:8px">
+                  <button class="btn btn-outline btn-sm" id="btn-theme-import" style="flex:1">Import</button>
+                  <button class="btn btn-outline btn-sm" id="btn-theme-export" style="flex:1">Export</button>
+                </div>
+                <div id="saved-themes-list" style="margin-top:12px"></div>
+              </div>
+
+              <div class="settings-section">
+                <h2 class="settings-section__title">Application</h2>
+                <div class="form-field"><label class="form-field__label" title="Acts as a global magnification zoom for the entire application, including the terminal.">Global UI Scale (Zoom)</label>
+                  <div class="tool-row"><input type="range" id="setting-font-size" min="10" max="18" value="13" style="flex:1"><span class="text-sm" id="setting-font-size-val">13px</span></div>
+                </div>
+                <div class="form-field" style="margin-top:8px"><label class="form-field__label" title="Adjusts the specific base font size of the Terminal monitor and input boxes independently of the global scale.">Terminal Base Font</label>
+                  <div class="tool-row"><input type="range" id="setting-mono-size" min="10" max="18" value="12" style="flex:1"><span class="text-sm" id="setting-mono-size-val">12px</span></div>
+                </div>
+              </div>
+
+              <div class="settings-section" style="text-align: center; padding: 24px 0;">
+                <img src="../assets/icon.png" alt="App Icon" style="width: 120px; height: 120px; border-radius: 26px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); margin-bottom: 16px;">
+                <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Serial Debug Assistant Pro</h2>
+                <p class="text-sm text-muted" style="margin: 0 0 16px 0;">Version 1.0.0</p>
+                <p class="text-xs text-muted" style="line-height: 1.5; max-width: 250px; margin: 0 auto; margin-bottom: 16px;">Electron-based serial debug tool with waveform, scripting, and multi-protocol support.</p>
+                <div style="font-size: 11px; color: var(--text-muted); background: var(--surface-1); padding: 12px; border-radius: 8px; margin: 0 auto; max-width: 280px; text-align: center;">
+                  <p style="margin: 0 0 6px 0; color: var(--text-primary);"><strong>Author:</strong> Sachin M C</p>
+                  <p style="margin: 0 0 6px 0">Claude 4.6 & Gemini 3.1 using Antigravity</p>
+                  <p style="margin: 0; font-size: 10px; opacity: 0.8; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">Special thanks to all the amazing open source code & libraries used in this project.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL: USER GUIDE -->
+          <div class="panel" id="panel-guide">
+            <div class="guide-scroll">
+              <div class="guide-section">
+                <h1 class="guide-title">Serial Debug Assistant Pro — User Guide</h1>
+                <p class="guide-intro">A professional-grade serial debug tool supporting Serial, TCP, and UDP connections with real-time waveform visualization, scripting, command automation, and split-view analysis.</p>
+              </div>
+
+              <!-- CONNECTIONS -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="connections">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  Connection Setup
+                </h2>
+                <div class="guide-body">
+                  <h3>Serial (UART)</h3>
+                  <p>Select your COM port from the dropdown (click 🔄 to refresh), set <strong>Baud Rate</strong> (default 115200), Data Bits (5-8), Parity, Stop Bits, and Flow Control. Click <strong>Connect</strong>.</p>
+                  <h3>TCP Client / Server</h3>
+                  <p><strong>Client:</strong> Enter host IP and port, then connect. <strong>Server:</strong> Enter a port to listen on; incoming connections are shown via toast notifications.</p>
+                  <h3>UDP</h3>
+                  <p>Bind to a <strong>Local Port</strong> for receiving. Set <strong>Remote Host</strong> and <strong>Remote Port</strong> for sending. UDP is connectionless — data is sent/received immediately.</p>
+                  <h3>Auto-Reconnect</h3>
+                  <p>Enable the <strong>Auto-Reconnect</strong> checkbox to retry the connection automatically every 3 seconds if it drops (Serial only).</p>
+                </div>
+              </div>
+
+              <!-- MONITOR -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="monitor">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  Monitor
+                </h2>
+                <div class="guide-body">
+                  <h3>Display Modes</h3>
+                  <ul>
+                    <li><strong>String</strong> — Decoded text (UTF-8, ASCII, GBK, Latin-1)</li>
+                    <li><strong>HEX</strong> — Raw bytes as hexadecimal: <code>48 65 6C 6C 6F</code></li>
+                    <li><strong>Both</strong> — Side-by-side hex + ASCII view</li>
+                  </ul>
+                  <h3>Frame Breaking</h3>
+                  <p>Enable <strong>Auto Frame Break</strong> to group bytes into frames based on idle gap (default 50ms). Useful for protocols without explicit delimiters.</p>
+                  <h3>Other Options</h3>
+                  <ul>
+                    <li><strong>Timestamp</strong> — Prefix each frame with <code>[14:30:05.123]</code></li>
+                    <li><strong>Auto Scroll</strong> — Keep display scrolled to latest data</li>
+                    <li><strong>Pause</strong> — Freeze display (data still captured in background)</li>
+                    <li><strong>Search</strong> — Filter frames by text (toggle RX/TX independently)</li>
+                  </ul>
+                  <h3>Sending Data</h3>
+                  <p>Type in the send bar at bottom. Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for newline. Options: <code>\n</code> / <code>\r</code> append, String/HEX mode, Auto-Repeat.</p>
+                  <p><strong>Send History:</strong> Press <strong>↑/↓</strong> arrows to navigate previously sent commands (up to 100 stored).</p>
+                </div>
+              </div>
+
+              <!-- WAVEFORM -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="waveform">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+                  Waveform Visualizer
+                </h2>
+                <div class="guide-body">
+                  <h3>Data Format</h3>
+                  <p>Your device must send one line per sample, terminated with <code>\n</code>. Supported formats:</p>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Key-Value Pairs (recommended)</div>
+                    <pre>temperature:23.5,pressure:1013.2,humidity:65.0\n
+temp=23.5, hum=65.2\n</pre>
+                  </div>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Plain CSV (auto-labeled CH1, CH2, ...)</div>
+                    <pre>100,200,300\n
+23.5 65.2 1013\n</pre>
+                  </div>
+                  <h3>Modes</h3>
+                  <ul>
+                    <li><strong>Plotter</strong> — Scrolling time-series chart. X = data point index.</li>
+                    <li><strong>Scope</strong> — Oscilloscope view. X = time (ms/div), Y = amplitude/div.</li>
+                  </ul>
+                  <h3>Channel Legend</h3>
+                  <p>Each detected channel appears with its color. Click the color dot in the toolbar to open <strong>Channel Config</strong> where you can rename channels, change colors, set scale/offset.</p>
+                  <h3>Data Sampling</h3>
+                  <p>For high-frequency streams, enable <strong>Data Sampling</strong> to process every Nth point (reduces CPU load).</p>
+                </div>
+              </div>
+
+              <!-- SPLIT-VIEW WAVEFORM -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="splitwave">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><polyline points="7,10 5,12 7,14"/><polyline points="17,10 19,12 17,14"/></svg>
+                  Split-View Waveform
+                </h2>
+                <div class="guide-body">
+                  <p>Create multiple independent waveform charts for comparing different channels side by side.</p>
+                  <h3>Creating Splits</h3>
+                  <p><strong>Right-click</strong> on any chart → select <strong>Split Horizontal ↔</strong> or <strong>Split Vertical ↕</strong>.</p>
+                  <h3>Per-View Controls</h3>
+                  <ul>
+                    <li><strong>Legend bar</strong> — Shows ALL channels as colored dots. <strong>Filled = enabled</strong>, <strong>Hollow = disabled</strong>. Click a dot to toggle.</li>
+                    <li><strong>Original view</strong> — All channels enabled by default.</li>
+                    <li><strong>New views</strong> — All channels <strong>disabled</strong> by default. Click dots to enable.</li>
+                    <li><strong>Scale bar</strong> — Independent Amp/div, Y-offset, ms/div per view.</li>
+                  </ul>
+                  <h3>Managing Views</h3>
+                  <ul>
+                    <li><strong>Click</strong> a view to activate it (highlighted border)</li>
+                    <li><strong>Drag</strong> the resizer handle between views to adjust sizes</li>
+                    <li><strong>Right-click → Close View</strong> to remove (cannot close last view)</li>
+                    <li><strong>Right-click → Screenshot</strong> to capture view(s) as PNG</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- COMMANDS -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="commands">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+                  Commands (600 Slots)
+                </h2>
+                <div class="guide-body">
+                  <p>Store up to <strong>600 commands</strong> (paged 20 per page). Each command has a name, data payload, format (String/HEX), and optional notes.</p>
+                  <ul>
+                    <li>Click any empty slot to create a command</li>
+                    <li>Click <strong>Send</strong> to transmit, <strong>Edit</strong> to modify</li>
+                    <li>Use <strong>Import/Export</strong> to share command sets as JSON</li>
+                  </ul>
+                  <h3>Command Modes</h3>
+                  <p>Each command operates in one of three modes, selected in the edit dialog:</p>
+                  <div class="guide-code">
+                    <div class="guide-code__title">① Single Mode (default)</div>
+                    <pre>Sends the command once when clicked. No badge shown.</pre>
+                  </div>
+                  <div class="guide-code">
+                    <div class="guide-code__title">② Repeat Mode (×N badge)</div>
+                    <pre>Sends the command N times at a configurable interval.
+• Repeat Count: number of sends (default 5)
+• Interval (ms): delay between sends (default 500)
+Click Send again while running to STOP.</pre>
+                  </div>
+                  <div class="guide-code">
+                    <div class="guide-code__title">③ Function of Time Mode (f(t) badge)</div>
+                    <pre>Sends a dynamically computed value over time.
+• Expression: math formula using t (seconds), e.g. sin(2*PI*t)
+• Rate (ms): evaluation interval (default 100)
+• Duration (s): how long to run (default 5)
+• Decimals: number formatting precision
+
+If command Data contains {fn}, the value replaces it:
+  Data: "SET_SPEED {fn}"  →  sends "SET_SPEED 1.00"</pre>
+                  </div>
+                  <h3>Macro Keys</h3>
+                  <p>Assign keyboard shortcuts to any command. Click the key badge on a card, press any key to assign. Press <strong>Escape</strong> to remove. Use the <strong>Macro Listener</strong> box to trigger commands via keyboard.</p>
+                </div>
+              </div>
+
+              <!-- MATH FUNCTIONS REFERENCE -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="mathref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+                  Math Functions Reference
+                </h2>
+                <div class="guide-body">
+                  <p>Available in <strong>f(t) mode</strong>, <strong>Math Channels</strong>, and script expressions:</p>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Functions & Constants</div>
+                    <pre>sin(x)  cos(x)  tan(x)    — Trigonometric
+abs(x)  sqrt(x) log(x)    — Absolute, square root, natural log
+pow(x,y) min(a,b) max(a,b) — Power, min, max
+round(x) floor(x) ceil(x)  — Rounding
+PI (3.14159...)  E (2.71828...) — Constants
+t — elapsed time in seconds (f(t) mode)</pre>
+                  </div>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Example Expressions</div>
+                    <pre>sin(2 * PI * t)              — 1 Hz sine wave
+sin(t) * 127 + 128           — Sine scaled to 0–255 (PWM)
+t &lt; 2 ? 0 : 255              — Step function at t=2s
+(t % 1) * 255                — Sawtooth wave, 1 Hz
+pow(E, -t*0.5) * sin(t) * 100 — Damped oscillation
+t * 10                       — Linear ramp (10 units/sec)</pre>
+                  </div>
+                </div>
+              </div>
+
+              <!-- MATH CHANNELS -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="mathch">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M4 20l4-16M12 20l4-16M2 8h18M4 16h18"/></svg>
+                  Math Channels
+                </h2>
+                <div class="guide-body">
+                  <p>Create computed channels from expressions applied to incoming data. Access via the waveform toolbar.</p>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Examples (reference channel names from your data)</div>
+                    <pre>voltage * current        — compute power
+(CH1 + CH2) / 2          — average two channels
+abs(CH1 - CH2)           — absolute difference
+sin(t * 0.1) * CH1       — modulated channel</pre>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SEQUENCE -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="sequence">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg>
+                  Sequence
+                </h2>
+                <div class="guide-body">
+                  <p>Chain multiple commands with configurable delays for automated test sequences.</p>
+                  <ul>
+                    <li><strong>Add Step</strong> — Set data, delay (ms), and format per step</li>
+                    <li><strong>▶ Run</strong> — Execute all steps in order</li>
+                    <li><strong>Loop</strong> — Repeat continuously until stopped</li>
+                    <li><strong>Default Delay</strong> — Pre-fill delay for new steps</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- SCRIPT ENGINE -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="script">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>
+                  Script Engine
+                </h2>
+                <div class="guide-body">
+                  <p>Write JavaScript to automate complex send/receive scenarios. Scripts run in a <strong>sandboxed VM</strong> with a 5-second startup timeout.</p>
+                  <div class="guide-code">
+                    <div class="guide-code__title">API Reference</div>
+                    <pre>send(string)         — Send text over active connection
+sendHex("FF 01 02")  — Send raw hex bytes
+onData(function(data){}) — Register receive handler
+                         (data = byte array)
+log(...args)         — Print to script console
+console.log(...)     — Same as log()
+setTimeout(fn, ms)   — Delayed execution
+setInterval(fn, ms)  — Repeated execution
+clearTimeout(id)     — Cancel timeout
+clearInterval(id)    — Cancel interval</pre>
+                  </div>
+                  <div class="guide-code">
+                    <div class="guide-code__title">Built-in Objects</div>
+                    <pre>Math, Date, JSON, String, Number, Array, Object,
+Boolean, RegExp, parseInt, parseFloat, isNaN,
+isFinite, Buffer.from(), Buffer.alloc()</pre>
+                  </div>
+                  <div class="guide-code" style="margin-top:8px">
+                    <div class="guide-code__title">Example: Auto-Response</div>
+                    <pre>log("Auto-responder started");
+onData(function(data) {
+  var text = data.map(function(b) {
+    return String.fromCharCode(b);
+  }).join('').trim();
+  if (text === "PING") {
+    send("PONG\n");
+    log("Replied PONG");
+  }
+});</pre>
+                  </div>
+                  <div class="guide-code" style="margin-top:8px">
+                    <div class="guide-code__title">Example: Periodic Sensor Poll</div>
+                    <pre>var count = 0;
+var timer = setInterval(function() {
+  send("READ_SENSOR\n");
+  count++;
+  log("Poll #" + count);
+  if (count >= 50) {
+    clearInterval(timer);
+    log("Done");
+  }
+}, 500);</pre>
+                  </div>
+                  <div class="guide-code" style="margin-top:8px">
+                    <div class="guide-code__title">Example: Binary Protocol Packet</div>
+                    <pre>function sendPacket(cmd, payload) {
+  var bytes = [0xAA, 0x55, cmd, payload.length];
+  bytes = bytes.concat(payload);
+  var checksum = 0;
+  for (var i = 0; i &lt; bytes.length; i++)
+    checksum ^= bytes[i];
+  bytes.push(checksum);
+  var hex = bytes.map(function(b) {
+    return b.toString(16).padStart(2, '0');
+  }).join('');
+  sendHex(hex);
+  log("Sent CMD=0x" + cmd.toString(16));
+}
+sendPacket(0x01, [0x00, 0x64]);</pre>
+                  </div>
+                  <div class="guide-code" style="margin-top:8px">
+                    <div class="guide-code__title">Example: Data Parser with Alert</div>
+                    <pre>var buffer = "";
+onData(function(data) {
+  buffer += data.map(function(b) {
+    return String.fromCharCode(b);
+  }).join('');
+  var lines = buffer.split("\n");
+  buffer = lines.pop();
+  lines.forEach(function(line) {
+    line = line.trim();
+    if (line.startsWith("TEMP:")) {
+      var temp = parseFloat(line.substring(5));
+      log("Temperature: " + temp + "°C");
+      if (temp > 50) {
+        send("ALERT_HIGH_TEMP\n");
+        log("⚠ HIGH TEMP!");
+      }
+    }
+  });
+});</pre>
+                  </div>
+                  <div class="guide-code" style="margin-top:8px">
+                    <div class="guide-code__title">Example: AT Command Sequence</div>
+                    <pre>log("Starting AT test...");
+send("AT\r\n");
+setTimeout(function() {
+  send("AT+GMR\r\n");
+}, 1000);
+setTimeout(function() {
+  send("AT+CWMODE=1\r\n");
+}, 2000);
+setTimeout(function() {
+  send("AT+CWLAP\r\n");
+  log("WiFi scan started");
+}, 3000);</pre>
+                  </div>
+                  <h3>Important Notes</h3>
+                  <ul>
+                    <li>Scripts run in a <strong>sandboxed environment</strong> — no filesystem or network access</li>
+                    <li>Startup timeout is 5 seconds — use <code>setInterval</code>/<code>setTimeout</code> for long tasks</li>
+                    <li>Click <strong>Stop</strong> to cancel all timers and clear handlers</li>
+                    <li>Script console retains up to 1000 log entries</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- TERMINAL -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="terminal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                  Terminal
+                </h2>
+                <div class="guide-body">
+                  <p>Full VT100-compatible terminal (xterm.js). Typing sends keystrokes directly to the connection.</p>
+                  <ul>
+                    <li><strong>Local Echo</strong> — Enable to see your own typed characters</li>
+                    <li>Supports ANSI escape sequences, colors, cursor control</li>
+                    <li>Scrollback buffer: 10,000 lines</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- SPLIT VIEW -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="split">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                  Split Panel Layout
+                </h2>
+                <div class="guide-body">
+                  <p>Run two panels side-by-side. Select a panel from the <strong>Split</strong> dropdown to open it in the right pane. Drag the divider to resize.</p>
+                  <p>Example workflows:</p>
+                  <ul>
+                    <li>Monitor + Waveform chart side by side</li>
+                    <li>Script editor + Terminal output</li>
+                    <li>Commands + User Guide for reference</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- THEMES & SETTINGS -->
+              <div class="guide-section">
+                <h2 class="guide-heading" data-section="settings">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                  Settings & Themes
+                </h2>
+                <div class="guide-body">
+                  <h3>Themes</h3>
+                  <p>Built-in presets: <strong>Midnight</strong> (default), <strong>Cyberpunk</strong>, <strong>Forest</strong>, <strong>Ocean</strong>, <strong>Sunset</strong>. Customize individual colors and save/export your own themes.</p>
+                  <h3>Font Sizes</h3>
+                  <p>Adjust <strong>UI Font Size</strong> (general text) and <strong>Mono Font Size</strong> (monitor/terminal) independently.</p>
+                  <h3>Keyboard Shortcuts</h3>
+                  <ul>
+                    <li><strong>Enter</strong> — Send data from send bar</li>
+                    <li><strong>Shift+Enter</strong> — New line in send input</li>
+                    <li><strong>↑ / ↓</strong> — Navigate send history</li>
+                    <li><strong>Tab</strong> (in script editor) — Insert 2 spaces</li>
+                    <li><strong>Right-click</strong> (on waveform) — Context menu</li>
+                  </ul>
+                  <h3>State Persistence</h3>
+                  <p>All settings are saved automatically: connection config, display preferences, commands, repeat/function configs, macro keys, math channels, themes, and send history. Settings persist across app restarts.</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+
+        </div><!-- /split-primary -->
+
+        <!-- Split divider + secondary pane -->
+        <div class="split-divider hidden" id="split-divider"></div>
+        <div class="split-pane split-pane--secondary hidden" id="split-secondary">
+          <div class="split-header">
+            <select id="split-panel-select" class="split-panel-select">
+              <option value="main">Monitor</option>
+              <option value="waveform" selected>Waveform</option>
+              <option value="commands">Commands</option>
+              <option value="sequence">Sequence</option>
+              <option value="script">Script</option>
+              <option value="terminal">Terminal</option>
+              <option value="settings">Settings</option>
+              <option value="guide">User Guide</option>
+            </select>
+            <button class="btn btn-ghost btn-icon btn-xs" id="btn-split-close" title="Close split">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <!-- Panel moved here dynamically -->
+        </div>
+
+      </div><!-- /content -->
+    </div><!-- /main-row -->
+  </div><!-- /app-container -->
+
+  <!-- Modals -->
+  <div class="modal-overlay hidden" id="modal-port-config"><div class="modal"><div class="modal__header"><span class="modal__title">Port Configuration</span><button class="btn btn-ghost btn-icon btn-sm" id="modal-port-config-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal__body"><p class="text-sm text-muted">Settings are configured in the left panel.</p></div><div class="modal__footer"><button class="btn btn-primary btn-sm" id="modal-port-config-ok">OK</button></div></div></div>
+
+  <!-- Command Edit Modal (redesigned) -->
+  <div class="modal-overlay hidden" id="modal-cmd-edit">
+    <div class="modal" style="max-width:540px">
+      <div class="modal__header">
+        <span class="modal__title">Edit Command</span>
+        <button class="btn btn-ghost btn-icon btn-sm" id="modal-cmd-edit-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal__body" style="padding:16px;">
+        <!-- Basic Info -->
+        <div class="form-row" style="margin-bottom:8px;"><label>Name</label><input type="text" id="cmd-edit-name" placeholder="Command name"></div>
+        <div class="form-row" style="margin-bottom:8px;"><label>Format</label><select id="cmd-edit-format" style="width:100px"><option value="string">String</option><option value="hex">HEX</option></select></div>
+        <div class="form-row" style="margin-bottom:8px;"><label>Data</label><textarea id="cmd-edit-data" rows="3" placeholder="Data to send (use {fn} to embed function output)"></textarea></div>
+
+        <!-- Send Mode: Single / Repeat / Function -->
+        <div class="cmd-mode-section">
+          <div class="cmd-mode-tabs" id="cmd-mode-tabs">
+            <button class="cmd-mode-tab active" data-mode="single">Single Send</button>
+            <button class="cmd-mode-tab" data-mode="repeat">Repeat</button>
+            <button class="cmd-mode-tab" data-mode="function">f(t) Function</button>
+          </div>
+
+          <!-- Single mode — no extra options -->
+          <div class="cmd-mode-panel active" id="cmd-mode-single">
+            <p class="text-xs text-muted" style="margin:0;">Sends the data once when triggered.</p>
+          </div>
+
+          <!-- Repeat mode -->
+          <div class="cmd-mode-panel" id="cmd-mode-repeat">
+            <div class="form-row" style="gap:8px; margin-bottom:6px;">
+              <label style="min-width:55px; font-size:11px;">Count</label>
+              <input type="number" id="cmd-edit-repeat-count" value="5" min="1" max="100000" style="width:80px">
+              <label style="min-width:55px; font-size:11px; margin-left:8px;">Rate (ms)</label>
+              <input type="number" id="cmd-edit-repeat-rate" value="500" min="10" max="60000" style="width:80px">
+            </div>
+            <p class="text-xs text-muted" style="margin:0;">Sends the data repeatedly. Click Send again to stop.</p>
+          </div>
+
+          <!-- Function of time mode -->
+          <div class="cmd-mode-panel" id="cmd-mode-function">
+            <div class="form-row" style="gap:8px; margin-bottom:6px;">
+              <label style="min-width:40px; font-size:11px;">f(t) =</label>
+              <input type="text" id="cmd-edit-fn-expr" placeholder="sin(t) * 100" style="font-family:var(--font-mono); flex:1;">
+            </div>
+            <div class="form-row" style="gap:8px; margin-bottom:6px;">
+              <label style="min-width:55px; font-size:11px;">Rate (ms)</label>
+              <input type="number" id="cmd-edit-fn-rate" value="100" min="10" style="width:70px">
+              <label style="min-width:55px; font-size:11px; margin-left:8px;">Duration (s)</label>
+              <input type="number" id="cmd-edit-fn-duration" value="5" min="1" style="width:70px">
+              <label style="min-width:55px; font-size:11px; margin-left:8px;">Decimals</label>
+              <input type="number" id="cmd-edit-fn-decimals" value="2" min="0" max="10" style="width:50px">
+            </div>
+            <div class="cmd-fn-help">
+              <p>Use <code>{fn}</code> in the Data field to embed the output, e.g. <code>SET {fn}\n</code></p>
+              <p>If no <code>{fn}</code> is found, the raw number is sent.</p>
+              <p>Functions: <code>sin cos tan abs sqrt log pow min max floor ceil round</code></p>
+              <p>Constants: <code>PI E</code> &nbsp; Variable: <code>t</code> (seconds elapsed)</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:8px;"><label>Notes</label><input type="text" id="cmd-edit-notes" placeholder="Optional notes"></div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn-outline btn-sm" id="modal-cmd-edit-delete">Delete</button>
+        <div class="ml-auto"></div>
+        <button class="btn btn-outline btn-sm" id="modal-cmd-edit-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="modal-cmd-edit-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="modal-seq-add"><div class="modal"><div class="modal__header"><span class="modal__title">Add to Sequence</span><button class="btn btn-ghost btn-icon btn-sm" id="modal-seq-add-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal__body"><div class="form-row"><label>Command</label><select id="seq-add-cmd" style="width:100%"></select></div><div class="form-row"><label>Delay (ms)</label><input type="number" id="seq-add-delay" value="100" min="0" max="60000"></div></div><div class="modal__footer"><button class="btn btn-outline btn-sm" id="modal-seq-add-cancel">Cancel</button><button class="btn btn-primary btn-sm" id="modal-seq-add-ok">Add</button></div></div></div>
+
+  <!-- Sequence Edit Modal -->
+  <div class="modal-overlay hidden" id="modal-seq-edit">
+    <div class="modal">
+      <div class="modal__header"><span class="modal__title">Edit Sequence Item</span>
+        <button class="btn btn-ghost btn-icon btn-sm" id="modal-seq-edit-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal__body">
+        <div class="form-row"><label>Command</label><select id="seq-edit-cmd" style="width:100%"></select></div>
+        <div class="form-row"><label>Delay (ms)</label><input type="number" id="seq-edit-delay" value="100" min="0" max="60000"></div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn-outline btn-sm" id="modal-seq-edit-delete">Remove</button>
+        <div class="ml-auto"></div>
+        <button class="btn btn-outline btn-sm" id="modal-seq-edit-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="modal-seq-edit-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Math Channel Modal -->
+  <div class="modal-overlay hidden" id="modal-math-channel">
+    <div class="modal" style="min-width:420px">
+      <div class="modal__header"><span class="modal__title" id="math-modal-title">Add Math Channel</span>
+        <button class="btn btn-ghost btn-icon btn-sm" id="modal-math-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal__body">
+        <div class="form-row"><label>Name</label><input type="text" id="math-ch-name" placeholder="e.g. power" value=""></div>
+        <div class="form-row"><label>Expression</label><input type="text" id="math-ch-expr" placeholder="e.g. ch1 * ch2 / 1000" value="" style="font-family:var(--font-mono)"></div>
+        <div class="form-row"><label>Color</label><input type="color" id="math-ch-color" value="#ec4899"></div>
+        <div style="padding:8px 0">
+          <p class="text-sm text-muted" style="margin-bottom:4px">Use channel names from your data (e.g. <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">ch1</code>, <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">temperature</code>).</p>
+          <p class="text-sm text-muted" style="margin-bottom:4px">Operators: <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">+ - * / %</code></p>
+          <p class="text-sm text-muted" style="margin-bottom:4px">Functions: <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">sin cos tan abs sqrt log pow</code></p>
+          <p class="text-sm text-muted">Variables: <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">t</code> (sample index), <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">PI</code>, <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">E</code></p>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn-outline btn-sm" id="modal-math-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="modal-math-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+  <script src="app.js"></script>
+</body>
+</html>
