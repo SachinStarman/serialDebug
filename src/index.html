@@ -145,9 +145,8 @@
           <div class="left-panel__section"><h3 class="left-panel__title">WAVEFORM</h3>
             <div class="tool-group">
               <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="waveform-enabled" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Enabled</span></div>
-              <div class="form-field"><label class="form-field__label">Mode</label><div class="segmented segmented--full" id="waveform-mode"><button class="segmented__btn active" data-mode="plotter">Plotter</button><button class="segmented__btn" data-mode="scope">Scope</button></div></div>
-              <div class="form-field" id="plotter-controls"><label class="form-field__label">Points</label><input type="number" id="waveform-points" value="500" min="20" max="5000" step="10"></div>
               <div class="form-field"><label class="form-field__label" title="Scope time-axis mode: Auto uses real timestamps, Manual uses your defined data rate">Timing</label><div class="segmented segmented--full" id="scope-timing-mode"><button class="segmented__btn active" data-mode="auto">Auto</button><button class="segmented__btn" data-mode="manual">Manual</button></div></div>
+
               <div class="form-field" id="data-rate-field" style="display:none"><label class="form-field__label" title="Hardware data rate: Milliseconds per data point">Data Rate</label><input type="number" id="waveform-data-rate" value="1.0" min="0.1" step="0.5" title="Milliseconds per point (uniform spacing in scope mode)"><span class="text-xs text-muted" style="margin-left:4px">ms/pt</span></div>
               <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-pause">Pause</button>
               <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-clear">Clear</button>
@@ -491,10 +490,12 @@ temp=23.5, hum=65.2\n</pre>
                     <pre>100,200,300\n
 23.5 65.2 1013\n</pre>
                   </div>
-                  <h3>Modes</h3>
+                  <h3>Display Mode</h3>
+                  <p>Oscilloscope-style view. X-axis = time (ms/div), Y-axis = amplitude/div. Use the scale bar below the chart to control <strong>Amp/div</strong>, <strong>Y-offset</strong>, and <strong>ms/div</strong> per view.</p>
+                  <h3>Timing Mode</h3>
                   <ul>
-                    <li><strong>Plotter</strong> — Scrolling time-series chart. X = data point index.</li>
-                    <li><strong>Scope</strong> — Oscilloscope view. X = time (ms/div), Y = amplitude/div.</li>
+                    <li><strong>Auto</strong> — Uses real timestamps from when data arrives. Best for variable-rate streams.</li>
+                    <li><strong>Manual</strong> — Uses your defined data rate (ms/point) for uniform spacing. Best for fixed-rate hardware.</li>
                   </ul>
                   <h3>Channel Legend</h3>
                   <p>Each detected channel appears with its color. Click the color dot in the toolbar to open <strong>Channel Config</strong> where you can rename channels, change colors, set scale/offset.</p>

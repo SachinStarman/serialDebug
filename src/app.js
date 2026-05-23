@@ -32,8 +32,7 @@ const state = {
   waveformData: [],          // array of {timestamp, channels: {label:val}}
   channelConfigs: {},        // { ch0: {name, displayMode, color, scale, offset, visible} }
   waveformLineBuffer: '',    // accumulator for partial lines
-  waveformMode: 'plotter',   // 'plotter' | 'scope'
-  waveformWindow: 200,       // visible points window for scope mode
+  waveformMode: 'scope',     // scope mode only (plotter removed)
   waveformDirty: false,      // flag for throttled chart updates
   waveformRAF: null,         // requestAnimationFrame ID
   waveformAmpDiv: 5.0,       // scope: amplitude per division
@@ -878,9 +877,7 @@ function initWaveformPanel() {
     state.waveformEnabled = e.target.checked;
   });
 
-  document.getElementById('waveform-points').addEventListener('change', (e) => {
-    state.waveformPoints = parseInt(e.target.value);
-  });
+  // waveform-points control removed (scope mode uses time-based windowing)
 
   // Scope timing mode toggle (Auto / Manual)
   document.querySelectorAll('#scope-timing-mode .segmented__btn').forEach(btn => {
@@ -899,29 +896,6 @@ function initWaveformPanel() {
     updateChart();
   });
 
-  // Waveform mode toggle (Plotter / Scope)
-  document.querySelectorAll('#waveform-mode .segmented__btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#waveform-mode .segmented__btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.waveformMode = btn.dataset.mode;
-
-      // Toggle visibility of controls
-      const isScope = state.waveformMode === 'scope';
-      const plotterCtrl = document.getElementById('plotter-controls');
-      if (plotterCtrl) plotterCtrl.style.display = isScope ? 'none' : '';
-
-      // Clear data buffers when switching modes to avoid scaling glitches
-      state.waveformData = [];
-      state.waveformViews.forEach(v => {
-        if (v.chart) {
-          v.chart.data.labels = [];
-          v.chart.data.datasets.forEach(ds => { ds.data = []; });
-          v.chart.update('none');
-        }
-      });
-    });
-  });
 
   // Scope controls (amp/div, offset, ms/div) are now per-view — see buildViewUI()
 
@@ -1319,45 +1293,39 @@ function updateChart() {
 function updateSingleViewChart(view, allChannels) {
   const chart = view.chart;
   if (!chart) return;
-  const isScope = state.waveformMode === 'scope';
   let data;
 
-  if (isScope) {
-    chart.options.scales.x.display = false;
-    chart.options.scales.xScope.display = true;
-    const totalTimeMs = view.msDiv * 10;
-    chart.options.scales.xScope.min = 0;
-    chart.options.scales.xScope.max = totalTimeMs;
+  // Scope mode: time-based X axis with amplitude/div Y axis
+  chart.options.scales.x.display = false;
+  chart.options.scales.xScope.display = true;
+  const totalTimeMs = view.msDiv * 10;
+  chart.options.scales.xScope.min = 0;
+  chart.options.scales.xScope.max = totalTimeMs;
+  // Force grid step to exactly match ms/div so gridmarks are accurate
+  chart.options.scales.xScope.ticks.stepSize = view.msDiv;
 
-    if (state.scopeTimingMode === 'manual') {
-      // Manual mode: use user-defined data rate for uniform point spacing
-      const windowSize = Math.ceil(totalTimeMs / state.waveformDataRateMs) + 1;
-      data = state.waveformData.slice(-windowSize);
-    } else {
-      // Auto mode: use real timestamps for time-based windowing
-      const nowTs = state.waveformData.length > 0
-        ? state.waveformData[state.waveformData.length - 1].tsMs
-        : Date.now();
-      const cutoffTs = nowTs - totalTimeMs;
-      // Binary-search for the first point >= cutoffTs for efficiency
-      let lo = 0, hi = state.waveformData.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (state.waveformData[mid].tsMs < cutoffTs) lo = mid + 1;
-        else hi = mid;
-      }
-      data = state.waveformData.slice(lo);
-    }
-    const yRange = view.ampDiv * 4;
-    chart.options.scales.y.min = view.yCenter - yRange;
-    chart.options.scales.y.max = view.yCenter + yRange;
+  if (state.scopeTimingMode === 'manual') {
+    // Manual mode: use user-defined data rate for uniform point spacing
+    const windowSize = Math.ceil(totalTimeMs / state.waveformDataRateMs) + 1;
+    data = state.waveformData.slice(-windowSize);
   } else {
-    chart.options.scales.x.display = true;
-    chart.options.scales.xScope.display = false;
-    data = state.waveformData;
-    delete chart.options.scales.y.min;
-    delete chart.options.scales.y.max;
+    // Auto mode: use real timestamps for time-based windowing
+    const nowTs = state.waveformData.length > 0
+      ? state.waveformData[state.waveformData.length - 1].tsMs
+      : Date.now();
+    const cutoffTs = nowTs - totalTimeMs;
+    // Binary-search for the first point >= cutoffTs for efficiency
+    let lo = 0, hi = state.waveformData.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (state.waveformData[mid].tsMs < cutoffTs) lo = mid + 1;
+      else hi = mid;
+    }
+    data = state.waveformData.slice(lo);
   }
+  const yRange = view.ampDiv * 4;
+  chart.options.scales.y.min = view.yCenter - yRange;
+  chart.options.scales.y.max = view.yCenter + yRange;
 
   chart.data.labels = data.map(d => d.timestamp);
 
@@ -1377,29 +1345,24 @@ function updateSingleViewChart(view, allChannels) {
       const raw = d.channels[key];
       if (raw === undefined) return null;
       const yVal = raw * cfg.scale + cfg.offset;
-      if (isScope) {
-        const totalTimeMs = view.msDiv * 10;
-        let xVal;
-        if (state.scopeTimingMode === 'manual') {
-          // Manual: uniform spacing using user-defined data rate
-          const ptsFromEnd = data.length - 1 - i;
-          xVal = totalTimeMs - (ptsFromEnd * state.waveformDataRateMs);
-        } else {
-          // Auto: use actual timestamps for real time positioning
-          const newestTs = data[data.length - 1].tsMs;
-          const elapsed = newestTs - d.tsMs;
-          xVal = totalTimeMs - elapsed;
-        }
-        return { x: Math.max(0, xVal), y: yVal };
+      const totalTimeMs = view.msDiv * 10;
+      let xVal;
+      if (state.scopeTimingMode === 'manual') {
+        // Left-to-right: oldest point at x=0, newest grows rightward
+        xVal = i * state.waveformDataRateMs;
+      } else {
+        // Left-to-right: oldest visible point at x=0, newest at elapsed time
+        const oldestTs = data[0].tsMs;
+        xVal = d.tsMs - oldestTs;
       }
-      return yVal;
+      return { x: Math.min(totalTimeMs, xVal), y: yVal };
     });
     return {
       label, data: values,
       borderColor: cfg.color, backgroundColor: cfg.color,
       pointBackgroundColor: cfg.color, pointBorderColor: cfg.color,
       fill: false, hidden: false,
-      xAxisID: isScope ? 'xScope' : 'x',
+      xAxisID: 'xScope',
     };
   }).filter(Boolean);
 
@@ -1477,28 +1440,22 @@ function parseWaveformData(rawData) {
 
     state.waveformData.push({ timestamp, tsMs, channels });
 
-    // Trim based on mode — scope trimming adapts to timing mode
-    if (state.waveformMode === 'scope') {
-      const maxMsDiv = Math.max(...state.waveformViews.map(v => v.msDiv || 50), state.waveformMsDiv);
-      if (state.scopeTimingMode === 'manual') {
-        // Manual: point-count trimming using data rate
-        const maxWindow = Math.ceil((maxMsDiv * 10) / state.waveformDataRateMs) + 1;
-        const maxLen = maxWindow * 3;
-        if (state.waveformData.length > maxLen) {
-          state.waveformData.splice(0, state.waveformData.length - maxLen);
-        }
-      } else {
-        // Auto: time-based trimming using real timestamps
-        const keepTimeMs = maxMsDiv * 10 * 3;  // keep 3× the max window duration
-        const cutoff = tsMs - keepTimeMs;
-        let trimIdx = 0;
-        while (trimIdx < state.waveformData.length && state.waveformData[trimIdx].tsMs < cutoff) trimIdx++;
-        if (trimIdx > 0) state.waveformData.splice(0, trimIdx);
+    // Trim data — scope-style time-based trimming
+    const maxMsDiv = Math.max(...state.waveformViews.map(v => v.msDiv || 50), state.waveformMsDiv);
+    if (state.scopeTimingMode === 'manual') {
+      // Manual: point-count trimming using data rate
+      const maxWindow = Math.ceil((maxMsDiv * 10) / state.waveformDataRateMs) + 1;
+      const maxLen = maxWindow * 3;
+      if (state.waveformData.length > maxLen) {
+        state.waveformData.splice(0, state.waveformData.length - maxLen);
       }
     } else {
-      if (state.waveformData.length > state.waveformPoints) {
-        state.waveformData.splice(0, state.waveformData.length - state.waveformPoints);
-      }
+      // Auto: time-based trimming using real timestamps
+      const keepTimeMs = maxMsDiv * 10 * 3;  // keep 3× the max window duration
+      const cutoff = tsMs - keepTimeMs;
+      let trimIdx = 0;
+      while (trimIdx < state.waveformData.length && state.waveformData[trimIdx].tsMs < cutoff) trimIdx++;
+      if (trimIdx > 0) state.waveformData.splice(0, trimIdx);
     }
 
     // Track channel activity and create new configs dynamically
@@ -2226,7 +2183,7 @@ function saveState() {
       'tcp-host', 'tcp-port', 'udp-local-port', 'udp-remote-host', 'udp-remote-port',
       'display-mode', 'send-mode', 'display-encoding', 'send-encoding', 'auto-scroll',
       'auto-frame-break', 'frame-break-ms', 'auto-reconnect', 'show-timestamp',
-      'waveform-enabled', 'waveform-mode', 'waveform-points', 'waveform-data-rate', 'scope-timing-mode', 'waveform-label-mode',
+      'waveform-enabled', 'waveform-data-rate', 'scope-timing-mode', 'waveform-label-mode',
       'data-sampling', 'data-sample-rate',
       'send-newline', 'send-cr', 'send-repeat', 'send-repeat-ms',
       'seq-loop', 'seq-default-delay', 'terminal-echo',
@@ -3301,10 +3258,13 @@ function initPerformanceMonitor() {
         container.removeChild(container.firstChild);
       }
     }
-    // Trim waveform data
-    const maxWaveform = state.waveformPoints * 2;
-    if (state.waveformData.length > maxWaveform) {
-      state.waveformData.splice(0, state.waveformData.length - state.waveformPoints);
+    // Trim waveform data (scope-style: time-based)
+    const maxMsDiv = Math.max(...state.waveformViews.map(v => v.msDiv || 50), state.waveformMsDiv || 50);
+    const maxKeep = state.scopeTimingMode === 'manual'
+      ? Math.ceil((maxMsDiv * 10) / (state.waveformDataRateMs || 1)) * 3
+      : 10000; // reasonable cap for auto mode
+    if (state.waveformData.length > maxKeep) {
+      state.waveformData.splice(0, state.waveformData.length - maxKeep);
     }
   }, 30000);
 }
