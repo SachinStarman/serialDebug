@@ -1,4 +1,6 @@
 const vm = require('vm');
+const fs = require('fs');
+const path = require('path');
 
 class ScriptEngine {
   constructor() {
@@ -17,6 +19,20 @@ class ScriptEngine {
     this.timers = [];
 
     const sandbox = {
+      logToFile: (filename, text) => {
+        if (!this.running) return;
+        try {
+          const logsDir = path.join(process.cwd(), 'logs');
+          if (!fs.existsSync(logsDir)) {
+            fs.mkdirSync(logsDir, { recursive: true });
+          }
+          const safeFilename = path.basename(filename);
+          const filePath = path.join(logsDir, safeFilename);
+          fs.appendFileSync(filePath, text + '\n');
+        } catch (err) {
+          this.logCallbacks.forEach(cb => cb(`logToFile error: ${err.message}`));
+        }
+      },
       send: (data) => {
         if (!this.running) return;
         this.sendCallbacks.forEach(cb => cb(data));

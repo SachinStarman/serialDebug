@@ -30,6 +30,10 @@ const state = {
   waveformPaused: false,
   waveformPoints: 500,
   waveformData: [],          // array of {timestamp, channels: {label:val}}
+  cursorEnabled: false,      // Cursors Phase 2
+  cursorA: null,             // Cursors Phase 2 A
+  cursorB: null,             // Cursors Phase 2 B
+  syncTimebase: true,        // Sync Timebase
   channelConfigs: {},        // { ch0: {name, displayMode, color, scale, offset, visible} }
   waveformLineBuffer: '',    // accumulator for partial lines
   waveformMode: 'scope',     // scope mode only (plotter removed)
@@ -40,6 +44,13 @@ const state = {
   waveformDataRateMs: 1.0,   // scope: manual data rate (ms between points)
   scopeTimingMode: 'auto',   // 'auto' (real timestamps) | 'manual' (user-defined data rate)
   waveformYCenter: 0,        // scope: Y-axis center offset
+  triggerEnabled: false,
+  triggerSource: 'CH1',
+  triggerMode: 'auto',       // 'auto' | 'normal'
+  triggerSlope: 'rising',    // 'rising' | 'falling'
+  triggerLevel: 0.0,
+  lastTriggerTime: 0,
+  lastTriggeredData: null,
 
   // Commands (600 slots, paged 20 per page)
   commands: new Array(600).fill(null),
@@ -872,6 +883,39 @@ async function sendData() {
 // ══════════════════════════════════════════════════════════
 let waveformChart = null;
 
+function updateTriggerSourceList() {
+  const select = document.getElementById('trigger-source');
+  if (!select) return;
+  const currentVal = select.value || state.triggerSource || 'CH1';
+  select.innerHTML = '';
+  
+  const allChannels = Object.keys(state.channelConfigs);
+  if (allChannels.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = 'CH1';
+    opt.textContent = 'CH1';
+    select.appendChild(opt);
+    return;
+  }
+  
+  allChannels.forEach(key => {
+    const cfg = state.channelConfigs[key];
+    const label = (cfg && (cfg.customName || cfg.name)) ? `${key} (${cfg.customName || cfg.name})` : key;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    select.appendChild(opt);
+  });
+  
+  if (allChannels.includes(currentVal)) {
+    select.value = currentVal;
+    state.triggerSource = currentVal;
+  } else if (allChannels.length > 0) {
+    select.value = allChannels[0];
+    state.triggerSource = allChannels[0];
+  }
+}
+
 function initWaveformPanel() {
   document.getElementById('waveform-enabled').addEventListener('change', (e) => {
     state.waveformEnabled = e.target.checked;
@@ -931,6 +975,11 @@ function initWaveformPanel() {
     if (!panel.classList.contains('hidden')) renderChannelConfig();
   });
 
+  // Waveform data export
+  document.getElementById('btn-waveform-export').addEventListener('click', () => {
+    exportWaveformData();
+  });
+
   const closeBtn = document.getElementById('btn-close-channel-config');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
@@ -960,6 +1009,87 @@ function initWaveformPanel() {
     sampleRate.addEventListener('change', (e) => { state.dataSampleRate = Math.max(2, parseInt(e.target.value) || 2); });
   }
 
+  // Cursor measurements toggle
+  const cursorsToggle = document.getElementById('waveform-cursors-toggle');
+  if (cursorsToggle) {
+    cursorsToggle.addEventListener('change', (e) => {
+      state.cursorEnabled = e.target.checked;
+      const readout = document.getElementById('cursor-readout');
+      if (readout) {
+        readout.classList.toggle('hidden', !state.cursorEnabled);
+      }
+      if (state.cursorEnabled) {
+        updateCursorReadout();
+      }
+      state.waveformViews.forEach(v => { if (v.chart) v.chart.draw(); });
+    });
+  }
+
+  // Timebase synchronization toggle
+  const syncTimebaseCb = document.getElementById('waveform-sync-timebase');
+  if (syncTimebaseCb) {
+    syncTimebaseCb.addEventListener('change', (e) => {
+      state.syncTimebase = e.target.checked;
+      if (state.syncTimebase && state.waveformViews.length > 0) {
+        const activeView = state.waveformViews.find(v => v.id === state.activeWaveViewId) || state.waveformViews[0];
+        state.waveformViews.forEach(v => {
+          v.msDiv = activeView.msDiv;
+          const input = v.el.querySelector('.wv-time');
+          if (input) input.value = activeView.msDiv;
+        });
+        scheduleChartUpdate();
+      }
+    });
+  }
+
+  // Scope Trigger Event Listeners
+  const triggerEnabledEl = document.getElementById('trigger-enabled');
+  if (triggerEnabledEl) {
+    triggerEnabledEl.addEventListener('change', (e) => {
+      state.triggerEnabled = e.target.checked;
+      saveState();
+      updateChart();
+    });
+  }
+
+  const triggerSourceEl = document.getElementById('trigger-source');
+  if (triggerSourceEl) {
+    triggerSourceEl.addEventListener('change', (e) => {
+      state.triggerSource = e.target.value;
+      saveState();
+      updateChart();
+    });
+  }
+
+  document.querySelectorAll('#trigger-mode .segmented__btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#trigger-mode .segmented__btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.triggerMode = btn.dataset.mode;
+      saveState();
+      updateChart();
+    });
+  });
+
+  document.querySelectorAll('#trigger-slope .segmented__btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#trigger-slope .segmented__btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.triggerSlope = btn.dataset.mode;
+      saveState();
+      updateChart();
+    });
+  });
+
+  const triggerLevelEl = document.getElementById('trigger-level');
+  if (triggerLevelEl) {
+    triggerLevelEl.addEventListener('change', (e) => {
+      state.triggerLevel = parseFloat(e.target.value) || 0.0;
+      saveState();
+      updateChart();
+    });
+  }
+
   // Init chart
   initChart();
 }
@@ -986,6 +1116,127 @@ function initChart() {
     view0El.classList.add('active-view');
     view0El.addEventListener('mousedown', () => setActiveView(0));
     buildViewUI(view0);
+    bindChartMouseEvents(view0); // Cursors Phase 2
+  }
+}
+
+function bindChartMouseEvents(view) {
+  const canvas = view.chart?.canvas;
+  if (!canvas) return;
+
+  // Prevent default context menu on right click in cursor mode
+  canvas.addEventListener('contextmenu', (e) => {
+    if (state.cursorEnabled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+
+  let activeCursorToDrag = null;
+
+  const getChartCoords = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const chart = view.chart;
+    const xScope = chart.scales.xScope;
+    const yScale = chart.scales.y;
+    if (!xScope || !yScale) return null;
+
+    const timeVal = xScope.getValueForPixel(x);
+    const yVal = yScale.getValueForPixel(y);
+    return { timeVal, yVal };
+  };
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (!state.cursorEnabled) return;
+    setActiveView(view.id);
+
+    const coords = getChartCoords(e);
+    if (!coords) return;
+    const { timeVal, yVal } = coords;
+
+    if (e.button === 0) { // Left-click (Trackpad friendly)
+      if (!state.cursorA) {
+        state.cursorA = { x: timeVal, y: yVal };
+        activeCursorToDrag = 'cursorA';
+      } else if (!state.cursorB) {
+        state.cursorB = { x: timeVal, y: yVal };
+        activeCursorToDrag = 'cursorB';
+      } else {
+        // Both exist, find nearest to grab/drag
+        const distA = Math.abs(timeVal - state.cursorA.x);
+        const distB = Math.abs(timeVal - state.cursorB.x);
+        if (distA < distB) {
+          state.cursorA = { x: timeVal, y: yVal };
+          activeCursorToDrag = 'cursorA';
+        } else {
+          state.cursorB = { x: timeVal, y: yVal };
+          activeCursorToDrag = 'cursorB';
+        }
+      }
+    } else if (e.button === 2) { // Right-click (Direct B placement fallback)
+      state.cursorB = { x: timeVal, y: yVal };
+      activeCursorToDrag = 'cursorB';
+    }
+
+    updateCursorReadout();
+    state.waveformViews.forEach(v => { if (v.chart) v.chart.draw(); });
+
+    const handleMouseMove = (moveEvent) => {
+      if (!activeCursorToDrag) return;
+      const moveCoords = getChartCoords(moveEvent);
+      if (!moveCoords) return;
+      state[activeCursorToDrag] = { x: moveCoords.timeVal, y: moveCoords.yVal };
+      updateCursorReadout();
+      state.waveformViews.forEach(v => { if (v.chart) v.chart.draw(); });
+    };
+
+    const handleMouseUp = () => {
+      activeCursorToDrag = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  });
+}
+
+function updateCursorReadout() {
+  const elA = document.getElementById('cur-a-val');
+  const elB = document.getElementById('cur-b-val');
+  const elDeltaT = document.getElementById('cur-delta-t');
+  const elDeltaV = document.getElementById('cur-delta-v');
+  const elFreq = document.getElementById('cur-freq');
+
+  if (!elA || !elB || !elDeltaT || !elDeltaV || !elFreq) return;
+
+  if (state.cursorA) {
+    elA.textContent = `${state.cursorA.x.toFixed(1)} ms, ${state.cursorA.y.toFixed(2)}`;
+  } else {
+    elA.textContent = '--';
+  }
+
+  if (state.cursorB) {
+    elB.textContent = `${state.cursorB.x.toFixed(1)} ms, ${state.cursorB.y.toFixed(2)}`;
+  } else {
+    elB.textContent = '--';
+  }
+
+  if (state.cursorA && state.cursorB) {
+    const dT = Math.abs(state.cursorB.x - state.cursorA.x);
+    const dV = Math.abs(state.cursorB.y - state.cursorA.y);
+    const f = dT > 0 ? (1000 / dT) : 0;
+
+    elDeltaT.textContent = `${dT.toFixed(1)} ms`;
+    elDeltaV.textContent = dV.toFixed(3);
+    elFreq.textContent = f > 0 ? (f < 1000 ? `${f.toFixed(1)} Hz` : `${(f/1000).toFixed(3)} kHz`) : '--';
+  } else {
+    elDeltaT.textContent = '--';
+    elDeltaV.textContent = '--';
+    elFreq.textContent = '--';
   }
 }
 
@@ -1025,6 +1276,56 @@ function getChartConfig() {
       },
       elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0.1 } },
     },
+    plugins: [{
+      id: 'cursorsPlugin',
+      afterDraw: (chart) => {
+        if (!state.cursorEnabled) return;
+        const ctx = chart.ctx;
+        const xScope = chart.scales.xScope;
+        const yScale = chart.scales.y;
+        if (!xScope || !yScale) return;
+        const chartArea = chart.chartArea;
+
+        const drawCursorLine = (cursor, color, label) => {
+          if (!cursor) return;
+          const xPixel = xScope.getPixelForValue(cursor.x);
+          
+          if (xPixel >= chartArea.left && xPixel <= chartArea.right) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 3]);
+            ctx.moveTo(xPixel, chartArea.top);
+            ctx.lineTo(xPixel, chartArea.bottom);
+            ctx.stroke();
+            
+            // Draw label at the top
+            ctx.fillStyle = color;
+            ctx.font = 'bold 10px JetBrains Mono, monospace';
+            ctx.textBaseline = 'top';
+            ctx.fillText(label, xPixel + 4, chartArea.top + 4);
+            
+            // Also draw horizontal line if cursor has y coordinate
+            const yPixel = yScale.getPixelForValue(cursor.y);
+            if (yPixel >= chartArea.top && yPixel <= chartArea.bottom) {
+              ctx.beginPath();
+              ctx.moveTo(chartArea.left, yPixel);
+              ctx.lineTo(chartArea.right, yPixel);
+              ctx.stroke();
+              
+              ctx.textBaseline = 'bottom';
+              ctx.fillText(`${label} (Y: ${cursor.y.toFixed(3)})`, chartArea.left + 4, yPixel - 2);
+            }
+            
+            ctx.restore();
+          }
+        };
+
+        drawCursorLine(state.cursorA, 'rgba(239, 68, 68, 0.85)', 'A'); // Red
+        drawCursorLine(state.cursorB, 'rgba(59, 130, 246, 0.85)', 'B'); // Blue
+      }
+    }]
   };
 }
 
@@ -1080,7 +1381,17 @@ function buildViewUI(view) {
   const timeIn = scaleBar.querySelector('.wv-time');
   ampIn.addEventListener('change', () => { view.ampDiv = parseFloat(ampIn.value) || 5; scheduleChartUpdate(); });
   offIn.addEventListener('change', () => { view.yCenter = parseFloat(offIn.value) || 0; scheduleChartUpdate(); });
-  timeIn.addEventListener('change', () => { view.msDiv = parseFloat(timeIn.value) || 50; scheduleChartUpdate(); });
+  timeIn.addEventListener('change', () => {
+    view.msDiv = parseFloat(timeIn.value) || 50;
+    if (state.syncTimebase) {
+      state.waveformViews.forEach(v => {
+        v.msDiv = view.msDiv;
+        const input = v.el.querySelector('.wv-time');
+        if (input && input !== timeIn) input.value = view.msDiv;
+      });
+    }
+    scheduleChartUpdate();
+  });
 
   scaleBar.querySelectorAll('.wv-ctrl-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1089,8 +1400,28 @@ function buildViewUI(view) {
       if (a === 'amp-down') { view.ampDiv = Math.min(1e6, view.ampDiv * 2); ampIn.value = view.ampDiv; }
       if (a === 'off-up') { view.yCenter += view.ampDiv; offIn.value = view.yCenter; }
       if (a === 'off-down') { view.yCenter -= view.ampDiv; offIn.value = view.yCenter; }
-      if (a === 'time-down') { view.msDiv = Math.max(1, Math.floor(view.msDiv * 0.5)); timeIn.value = view.msDiv; }
-      if (a === 'time-up') { view.msDiv = Math.min(5e6, Math.floor(view.msDiv * 2)); timeIn.value = view.msDiv; }
+      if (a === 'time-down') {
+        view.msDiv = Math.max(1, Math.floor(view.msDiv * 0.5));
+        timeIn.value = view.msDiv;
+        if (state.syncTimebase) {
+          state.waveformViews.forEach(v => {
+            v.msDiv = view.msDiv;
+            const input = v.el.querySelector('.wv-time');
+            if (input) input.value = view.msDiv;
+          });
+        }
+      }
+      if (a === 'time-up') {
+        view.msDiv = Math.min(5e6, Math.floor(view.msDiv * 2));
+        timeIn.value = view.msDiv;
+        if (state.syncTimebase) {
+          state.waveformViews.forEach(v => {
+            v.msDiv = view.msDiv;
+            const input = v.el.querySelector('.wv-time');
+            if (input) input.value = view.msDiv;
+          });
+        }
+      }
       scheduleChartUpdate();
     });
   });
@@ -1122,7 +1453,7 @@ function renderViewLegend(view) {
   });
 }
 
-function createWaveformView() {
+function createWaveformView(initialSettings = null) {
   const id = ++state.waveformWindowIdCounter;
   const viewEl = document.createElement('div');
   viewEl.className = 'waveform-view';
@@ -1140,10 +1471,15 @@ function createWaveformView() {
   viewEl.appendChild(chartWrapper);
 
   const chart = new Chart(canvas.getContext('2d'), getChartConfig());
+  const ampDiv = initialSettings ? initialSettings.ampDiv : state.waveformAmpDiv;
+  const yCenter = initialSettings ? initialSettings.yCenter : state.waveformYCenter;
+  const msDiv = initialSettings ? initialSettings.msDiv : state.waveformMsDiv;
+  const channelEnabled = initialSettings ? { ...initialSettings.channelEnabled } : {};
+
   const view = {
     id, chart, el: viewEl,
-    channelEnabled: {}, autoEnableNew: false,
-    ampDiv: state.waveformAmpDiv, yCenter: state.waveformYCenter, msDiv: state.waveformMsDiv,
+    channelEnabled: channelEnabled, autoEnableNew: initialSettings ? false : false,
+    ampDiv: ampDiv, yCenter: yCenter, msDiv: msDiv,
     _legendBar: null, _scaleBar: null,
   };
 
@@ -1156,6 +1492,7 @@ function createWaveformView() {
 
   state.waveformViews.push(view);
   buildViewUI(view);
+  bindChartMouseEvents(view); // Cursors Phase 2
   return view;
 }
 
@@ -1164,7 +1501,12 @@ function splitWaveformView(viewId, direction) {
   if (!src) return;
   const srcEl = src.el;
   const parent = srcEl.parentElement;
-  const newView = createWaveformView();
+  const newView = createWaveformView({
+    ampDiv: src.ampDiv,
+    yCenter: src.yCenter,
+    msDiv: src.msDiv,
+    channelEnabled: src.channelEnabled
+  });
   const isH = direction === 'split-h';
 
   const wrap = document.createElement('div');
@@ -1280,10 +1622,11 @@ function updateChart() {
     legendContainer._lastRender = nowMs;
   }
 
-  // Update per-view legends when channels change
+  // Update per-view legends and trigger source dropdown when channels change
   if (state._lastChCount !== allChannels.length) {
     state._lastChCount = allChannels.length;
     state.waveformViews.forEach(v => renderViewLegend(v));
+    updateTriggerSourceList();
   }
 
   // Update each view's chart
@@ -1293,8 +1636,7 @@ function updateChart() {
 function updateSingleViewChart(view, allChannels) {
   const chart = view.chart;
   if (!chart) return;
-  let data;
-
+  
   // Scope mode: time-based X axis with amplitude/div Y axis
   chart.options.scales.x.display = false;
   chart.options.scales.xScope.display = true;
@@ -1304,28 +1646,107 @@ function updateSingleViewChart(view, allChannels) {
   // Force grid step to exactly match ms/div so gridmarks are accurate
   chart.options.scales.xScope.ticks.stepSize = view.msDiv;
 
-  if (state.scopeTimingMode === 'manual') {
-    // Manual mode: use user-defined data rate for uniform point spacing
-    const windowSize = Math.ceil(totalTimeMs / state.waveformDataRateMs) + 1;
-    data = state.waveformData.slice(-windowSize);
-  } else {
-    // Auto mode: use real timestamps for time-based windowing
-    const nowTs = state.waveformData.length > 0
-      ? state.waveformData[state.waveformData.length - 1].tsMs
-      : Date.now();
-    const cutoffTs = nowTs - totalTimeMs;
-    // Binary-search for the first point >= cutoffTs for efficiency
-    let lo = 0, hi = state.waveformData.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (state.waveformData[mid].tsMs < cutoffTs) lo = mid + 1;
-      else hi = mid;
-    }
-    data = state.waveformData.slice(lo);
-  }
   const yRange = view.ampDiv * 4;
   chart.options.scales.y.min = view.yCenter - yRange;
   chart.options.scales.y.max = view.yCenter + yRange;
+
+  // 1. Map raw points with appropriate tsMs
+  let mappedPoints = state.waveformData.map((d, index) => {
+    const ts = (state.scopeTimingMode === 'manual') 
+      ? index * state.waveformDataRateMs 
+      : d.tsMs;
+    return { timestamp: d.timestamp, tsMs: ts, channels: d.channels };
+  });
+
+  let data = [];
+  let isTriggered = false;
+  let triggerTs = 0;
+
+  // 2. Trigger search logic
+  if (state.triggerEnabled && mappedPoints.length >= 2) {
+    const src = state.triggerSource;
+    const level = state.triggerLevel;
+    const slope = state.triggerSlope;
+
+    // Search backwards for the most recent trigger crossing
+    let triggerIdx = -1;
+    for (let i = mappedPoints.length - 1; i > 0; i--) {
+      const prevVal = mappedPoints[i - 1].channels[src];
+      const currVal = mappedPoints[i].channels[src];
+
+      if (prevVal === undefined || currVal === undefined) continue;
+
+      if (slope === 'rising') {
+        if (prevVal < level && currVal >= level) {
+          triggerIdx = i;
+          break;
+        }
+      } else { // falling
+        if (prevVal > level && currVal <= level) {
+          triggerIdx = i;
+          break;
+        }
+      }
+    }
+
+    const now = Date.now();
+    if (triggerIdx !== -1) {
+      isTriggered = true;
+      triggerTs = mappedPoints[triggerIdx].tsMs;
+      state.lastTriggerTime = now;
+
+      // Extract window around trigger: [triggerTs - totalTimeMs/2, triggerTs + totalTimeMs/2]
+      const minTs = triggerTs - totalTimeMs / 2;
+      const maxTs = triggerTs + totalTimeMs / 2;
+
+      let startIdx = 0;
+      while (startIdx < mappedPoints.length && mappedPoints[startIdx].tsMs < minTs) startIdx++;
+      let endIdx = startIdx;
+      while (endIdx < mappedPoints.length && mappedPoints[endIdx].tsMs <= maxTs) endIdx++;
+
+      data = mappedPoints.slice(startIdx, endIdx);
+      state.lastTriggeredData = data;
+      state.lastTriggeredTs = triggerTs;
+    } else {
+      // Trigger not found in current buffer
+      if (state.triggerMode === 'normal') {
+        // Normal mode: hold last triggered data slice
+        data = state.lastTriggeredData || [];
+        if (data.length > 0) {
+          isTriggered = true;
+          triggerTs = state.lastTriggeredTs || 0;
+        }
+      } else {
+        // Auto mode fallback: if last trigger was recent (within 500ms), hold it
+        if (state.lastTriggeredData && now - state.lastTriggerTime < 500) {
+          data = state.lastTriggeredData;
+          isTriggered = true;
+          triggerTs = state.lastTriggeredTs || 0;
+        } else {
+          // Fallback to normal scrolling (no trigger lock)
+          isTriggered = false;
+        }
+      }
+    }
+  }
+
+  // 3. Fallback to normal scrolling if not triggered
+  if (!isTriggered) {
+    if (state.scopeTimingMode === 'manual') {
+      const windowSize = Math.ceil(totalTimeMs / state.waveformDataRateMs) + 1;
+      data = mappedPoints.slice(-windowSize);
+    } else {
+      const nowTs = mappedPoints.length > 0 ? mappedPoints[mappedPoints.length - 1].tsMs : Date.now();
+      const cutoffTs = nowTs - totalTimeMs;
+      let lo = 0, hi = mappedPoints.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (mappedPoints[mid].tsMs < cutoffTs) lo = mid + 1;
+        else hi = mid;
+      }
+      data = mappedPoints.slice(lo);
+    }
+  }
 
   chart.data.labels = data.map(d => d.timestamp);
 
@@ -1345,18 +1766,24 @@ function updateSingleViewChart(view, allChannels) {
       const raw = d.channels[key];
       if (raw === undefined) return null;
       const yVal = raw * cfg.scale + cfg.offset;
-      const totalTimeMs = view.msDiv * 10;
+      
       let xVal;
-      if (state.scopeTimingMode === 'manual') {
-        // Left-to-right: oldest point at x=0, newest grows rightward
-        xVal = i * state.waveformDataRateMs;
+      if (isTriggered) {
+        // Triggered mode: triggerTs is aligned to the center of the chart
+        xVal = (d.tsMs - triggerTs) + (totalTimeMs / 2);
       } else {
-        // Left-to-right: oldest visible point at x=0, newest at elapsed time
-        const oldestTs = data[0].tsMs;
-        xVal = d.tsMs - oldestTs;
+        if (state.scopeTimingMode === 'manual') {
+          // Manual mode scrolling: oldest visible point at x=0
+          xVal = i * state.waveformDataRateMs;
+        } else {
+          // Auto mode scrolling: oldest visible point at x=0
+          const oldestTs = data.length > 0 ? data[0].tsMs : 0;
+          xVal = d.tsMs - oldestTs;
+        }
       }
-      return { x: Math.min(totalTimeMs, xVal), y: yVal };
-    });
+      return { x: Math.min(totalTimeMs, Math.max(0, xVal)), y: yVal };
+    }).filter(Boolean);
+
     return {
       label, data: values,
       borderColor: cfg.color, backgroundColor: cfg.color,
@@ -1365,6 +1792,24 @@ function updateSingleViewChart(view, allChannels) {
       xAxisID: 'xScope',
     };
   }).filter(Boolean);
+
+  // 4. Draw Trigger Level Line (if enabled and trigger source config is valid)
+  if (state.triggerEnabled) {
+    const trigCfg = state.channelConfigs[state.triggerSource];
+    if (trigCfg && trigCfg.visible) {
+      const yTriggerPlotted = state.triggerLevel * trigCfg.scale + trigCfg.offset;
+      datasets.push({
+        label: `Trigger Level (${state.triggerLevel})`,
+        data: [{ x: 0, y: yTriggerPlotted }, { x: totalTimeMs, y: yTriggerPlotted }],
+        borderColor: 'rgba(245, 158, 11, 0.65)',
+        borderWidth: 1.2,
+        borderDash: [6, 4],
+        fill: false,
+        pointRadius: 0,
+        xAxisID: 'xScope',
+      });
+    }
+  }
 
   chart.data.datasets = datasets;
   chart.update('none');
@@ -2184,7 +2629,8 @@ function saveState() {
       'display-mode', 'send-mode', 'display-encoding', 'send-encoding', 'auto-scroll',
       'auto-frame-break', 'frame-break-ms', 'auto-reconnect', 'show-timestamp',
       'waveform-enabled', 'waveform-data-rate', 'scope-timing-mode', 'waveform-label-mode',
-      'data-sampling', 'data-sample-rate',
+      'trigger-enabled', 'trigger-source', 'trigger-mode', 'trigger-slope', 'trigger-level',
+      'data-sampling', 'data-sample-rate', 'waveform-sync-timebase',
       'send-newline', 'send-cr', 'send-repeat', 'send-repeat-ms',
       'seq-loop', 'seq-default-delay', 'terminal-echo',
       'setting-font-size', 'setting-mono-size', 'split-panel-select'
@@ -2206,10 +2652,12 @@ function saveState() {
     // Sparse format: only serialize non-null commands to reduce localStorage bloat
     const sparseCommands = {};
     state.commands.forEach((cmd, i) => { if (cmd) sparseCommands[i] = cmd; });
+    const waveformLayout = serializeWaveformLayout();
     const data = {
       commands: sparseCommands,
       commandRepeatConfigs: state.commandRepeatConfigs,
-      uiState: uiState
+      uiState: uiState,
+      waveformLayout: waveformLayout
     };
     localStorage.setItem('serialDebugPro_state', JSON.stringify(data));
   } catch (err) {
@@ -2259,9 +2707,151 @@ function loadSavedState() {
         });
       }
       renderCommandGrid();
+      if (data.waveformLayout) {
+        deserializeWaveformLayout(data.waveformLayout);
+      }
     }
   } catch (err) {
     console.error('Error loading state:', err);
+  }
+}
+
+function serializeWaveformLayout() {
+  const root = document.getElementById('waveform-split-root');
+  if (!root) return null;
+
+  const traverse = (el) => {
+    if (el.classList.contains('waveform-view')) {
+      const viewId = parseInt(el.dataset.viewId);
+      const view = state.waveformViews.find(v => v.id === viewId);
+      if (view) {
+        return {
+          type: 'view',
+          viewId: view.id,
+          ampDiv: view.ampDiv,
+          yCenter: view.yCenter,
+          msDiv: view.msDiv,
+          channelEnabled: view.channelEnabled
+        };
+      }
+      return null;
+    } else if (el.id === 'waveform-split-root' || el.style.display === 'flex') {
+      const children = Array.from(el.children).filter(c => 
+        c.classList.contains('waveform-view') || 
+        (c.style.display === 'flex' && !c.classList.contains('waveform-chart-wrapper') && !c.classList.contains('waveform-container__chart'))
+      );
+      
+      if (children.length === 0) return null;
+      if (children.length === 1) return traverse(children[0]);
+
+      const direction = el.style.flexDirection === 'row' ? 'split-h' : 'split-v';
+      const flexSizes = children.map(c => parseFloat(c.style.flex) || 1.0);
+      const childNodes = children.map(traverse).filter(Boolean);
+      
+      return {
+        type: 'split',
+        direction: direction,
+        flexSizes: flexSizes,
+        children: childNodes
+      };
+    }
+    return null;
+  };
+
+  return traverse(root);
+}
+
+function deserializeWaveformLayout(layoutData) {
+  if (!layoutData) return;
+
+  const root = document.getElementById('waveform-split-root');
+  if (!root) return;
+
+  // 1. Destroy existing charts and clear root
+  state.waveformViews.forEach(v => {
+    if (v.chart) v.chart.destroy();
+  });
+  state.waveformViews = [];
+  root.innerHTML = '';
+  state.waveformWindowIdCounter = 0;
+
+  // 2. Recursive rebuild function
+  const rebuild = (node, parentEl) => {
+    if (!node) return;
+
+    if (node.type === 'view') {
+      const id = ++state.waveformWindowIdCounter;
+      const viewEl = document.createElement('div');
+      viewEl.className = 'waveform-view';
+      viewEl.id = `waveform-view-${id}`;
+      viewEl.dataset.viewId = id;
+      viewEl.style.cssText = 'flex:1; display:flex; flex-direction:column; position:relative; min-width:80px; min-height:60px;';
+
+      const chartWrapper = document.createElement('div');
+      chartWrapper.className = 'waveform-chart-wrapper';
+      const chartContainer = document.createElement('div');
+      chartContainer.className = 'waveform-container__chart';
+      const canvas = document.createElement('canvas');
+      chartContainer.appendChild(canvas);
+      chartWrapper.appendChild(chartContainer);
+      viewEl.appendChild(chartWrapper);
+      parentEl.appendChild(viewEl);
+
+      const chart = new Chart(canvas.getContext('2d'), getChartConfig());
+      const view = {
+        id, chart, el: viewEl,
+        channelEnabled: node.channelEnabled || {}, autoEnableNew: false,
+        ampDiv: node.ampDiv || state.waveformAmpDiv, 
+        yCenter: node.yCenter || state.waveformYCenter, 
+        msDiv: node.msDiv || state.waveformMsDiv,
+        _legendBar: null, _scaleBar: null,
+      };
+
+      viewEl.addEventListener('mousedown', () => setActiveView(id));
+      viewEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); state._ctxMenuViewId = id;
+        const m = document.getElementById('wave-ctx-menu');
+        if (m) { m.style.left = e.clientX + 'px'; m.style.top = e.clientY + 'px'; m.classList.remove('hidden'); }
+      });
+
+      state.waveformViews.push(view);
+      buildViewUI(view);
+      bindChartMouseEvents(view); // Cursors Phase 2
+      
+    } else if (node.type === 'split') {
+      const isH = node.direction === 'split-h';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = `display:flex; flex:1; flex-direction:${isH ? 'row' : 'column'}; overflow:hidden;`;
+      parentEl.appendChild(wrap);
+
+      node.children.forEach((child, index) => {
+        rebuild(child, wrap);
+        const childEl = wrap.children[wrap.children.length - 1];
+        if (childEl && node.flexSizes && node.flexSizes[index]) {
+          childEl.style.flex = node.flexSizes[index];
+        }
+      });
+
+      if (wrap.children.length >= 2) {
+        const resizer = document.createElement('div');
+        resizer.className = `waveform-split-resizer waveform-split-resizer--${isH ? 'v' : 'h'}`;
+        // Insert resizer between the two children
+        wrap.insertBefore(resizer, wrap.children[1]);
+        initSplitResizer(resizer, wrap, isH);
+      }
+    }
+  };
+
+  rebuild(layoutData, root);
+
+  if (state.waveformViews.length > 0) {
+    setActiveView(state.waveformViews[0].id);
+    setTimeout(() => {
+      state.waveformViews.forEach(v => {
+        if (v.chart) v.chart.resize();
+      });
+      scheduleChartUpdate();
+    }, 100);
   }
 }
 
@@ -2416,6 +3006,7 @@ function loadTheme() {
           if (data.colors[picker.dataset.var]) picker.value = data.colors[picker.dataset.var];
         });
         document.getElementById('custom-theme-editor').classList.remove('hidden');
+        updateThemePreview(); // Live Preview
       }
     } catch (e) { console.error('Theme load error:', e); }
   }
@@ -2432,6 +3023,98 @@ function getCustomColorsFromPickers() {
   });
   return colors;
 }
+
+function generateHarmony(hexColor) {
+  const hexToHsl = (hex) => {
+    hex = hex.replace(/^#/, '');
+    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+    let r = parseInt(hex.substring(0, 2), 16) / 255;
+    let g = parseInt(hex.substring(2, 4), 16) / 255;
+    let b = parseInt(hex.substring(4, 6), 16) / 255;
+    let max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      let d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  };
+
+  const hslToHex = (h, s, l) => {
+    l /= 100;
+    const a = s * Math.min(l, 1 - l) / 100;
+    const f = n => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+
+  try {
+    const base = hexToHsl(hexColor);
+    return {
+      complementary: hslToHex((base.h + 180) % 360, base.s, base.l),
+      triadic1: hslToHex((base.h + 120) % 360, base.s, base.l),
+      triadic2: hslToHex((base.h + 240) % 360, base.s, base.l),
+      analogous1: hslToHex((base.h + 30) % 360, base.s, base.l),
+      analogous2: hslToHex((base.h - 30 + 360) % 360, base.s, base.l),
+    };
+  } catch (e) {
+    return { complementary: '#ffffff', triadic1: '#ffffff', triadic2: '#ffffff', analogous1: '#ffffff', analogous2: '#ffffff' };
+  }
+}
+
+function updateThemePreview() {
+  const accentPicker = document.querySelector('.theme-color[data-var="--accent"]');
+  if (!accentPicker) return;
+  const accent = accentPicker.value;
+  const harmonies = generateHarmony(accent);
+  const harmonyPalette = document.getElementById('harmony-palette');
+  
+  if (harmonyPalette) {
+    harmonyPalette.innerHTML = `
+      <div class="harmony-color-block">
+        <div class="harmony-color-chip" style="background:${harmonies.complementary};" title="Complementary" onclick="applyHarmonyColor('${harmonies.complementary}')"></div>
+        <span class="harmony-color-label">Comp</span>
+      </div>
+      <div class="harmony-color-block">
+        <div class="harmony-color-chip" style="background:${harmonies.triadic1};" title="Triadic 1" onclick="applyHarmonyColor('${harmonies.triadic1}')"></div>
+        <span class="harmony-color-label">Triad 1</span>
+      </div>
+      <div class="harmony-color-block">
+        <div class="harmony-color-chip" style="background:${harmonies.triadic2};" title="Triadic 2" onclick="applyHarmonyColor('${harmonies.triadic2}')"></div>
+        <span class="harmony-color-label">Triad 2</span>
+      </div>
+      <div class="harmony-color-block">
+        <div class="harmony-color-chip" style="background:${harmonies.analogous1};" title="Analogous 1" onclick="applyHarmonyColor('${harmonies.analogous1}')"></div>
+        <span class="harmony-color-label">Analog 1</span>
+      </div>
+      <div class="harmony-color-block">
+        <div class="harmony-color-chip" style="background:${harmonies.analogous2};" title="Analogous 2" onclick="applyHarmonyColor('${harmonies.analogous2}')"></div>
+        <span class="harmony-color-label">Analog 2</span>
+      </div>
+    `;
+  }
+}
+
+window.applyHarmonyColor = function(color) {
+  const accentPicker = document.querySelector('.theme-color[data-var="--accent"]');
+  if (accentPicker) {
+    accentPicker.value = color;
+    const colors = getCustomColorsFromPickers();
+    applyThemeColors(colors);
+    updateThemePreview();
+  }
+};
 
 function renderSavedThemes() {
   const container = document.getElementById('saved-themes-list');
@@ -2457,6 +3140,7 @@ function applySavedTheme(index) {
       if (saved[index].colors[picker.dataset.var]) picker.value = saved[index].colors[picker.dataset.var];
     });
     saveThemeChoice('custom', saved[index].colors);
+    updateThemePreview(); // Live Preview
     showToast(`Applied theme "${saved[index].name}"`, 'success');
   }
 }
@@ -2480,6 +3164,7 @@ function initSettingsPanel() {
       const colors = getCustomColorsFromPickers();
       applyThemeColors(colors);
       saveThemeChoice('custom', colors);
+      updateThemePreview(); // Live Preview
     } else {
       editor.classList.add('hidden');
       if (THEME_PRESETS[val]) {
@@ -2495,6 +3180,7 @@ function initSettingsPanel() {
     picker.addEventListener('input', () => {
       const colors = getCustomColorsFromPickers();
       applyThemeColors(colors);
+      updateThemePreview(); // Live Preview
     });
   });
 
@@ -2948,6 +3634,7 @@ function saveMathChannel() {
     visible: true,
   };
 
+  clearMathCache();
   localStorage.setItem('serialDebugPro_mathChannels', JSON.stringify(state.mathChannels));
   renderMathChannelsList();
   document.getElementById('modal-math-channel').classList.add('hidden');
@@ -3034,6 +3721,7 @@ function renderMathChannelsList() {
       const name = state.mathChannels[idx].name;
       delete state.channelConfigs['math_' + name];
       state.mathChannels.splice(idx, 1);
+      clearMathCache();
       localStorage.setItem('serialDebugPro_mathChannels', JSON.stringify(state.mathChannels));
       renderMathChannelsList();
       showToast(`Removed math channel "${name}"`, 'info');
@@ -3048,15 +3736,29 @@ updateChart = function () {
   if (state.mathChannels.length > 0) {
     state.waveformData.forEach((d, t) => {
       state.mathChannels.forEach(mc => {
+        const chKey = 'math_' + mc.name;
+        if (d.channels[chKey] !== undefined) return;
         const val = evaluateMathExpr(mc.expr, d.channels, t);
         if (val !== null) {
-          d.channels['math_' + mc.name] = val;
+          d.channels[chKey] = val;
         }
       });
     });
   }
   _originalUpdateChart();
 };
+
+function clearMathCache() {
+  state.waveformData.forEach(d => {
+    if (d.channels) {
+      Object.keys(d.channels).forEach(key => {
+        if (key.startsWith('math_')) {
+          delete d.channels[key];
+        }
+      });
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════════
 // SEQUENCE EDIT MODAL
@@ -3630,4 +4332,60 @@ initSplitView = function () {
     }
   });
 };
+
+async function exportWaveformData() {
+  if (state.waveformData.length === 0) {
+    showToast('No waveform data to export', 'warning');
+    return;
+  }
+
+  const chKeys = new Set();
+  state.waveformData.forEach(d => {
+    if (d.channels) {
+      Object.keys(d.channels).forEach(k => chKeys.add(k));
+    }
+  });
+  const chList = Array.from(chKeys).sort();
+
+  const headers = ['Timestamp', 'Timestamp(ms)'];
+  chList.forEach(k => {
+    const cfg = state.channelConfigs[k];
+    const name = (cfg && (cfg.customName || cfg.name)) ? (cfg.customName || cfg.name) : k;
+    headers.push(name.replace(/"/g, '""'));
+  });
+
+  let csvContent = headers.join(',') + '\n';
+
+  state.waveformData.forEach(d => {
+    const row = [d.timestamp, d.tsMs];
+    chList.forEach(k => {
+      const val = d.channels ? d.channels[k] : undefined;
+      row.push(val !== undefined ? val : '');
+    });
+    csvContent += row.join(',') + '\n';
+  });
+
+  const result = await window.serialDebug.dialog.saveFile({
+    title: 'Export Waveform Data',
+    defaultPath: 'waveform_data.csv',
+    filters: [
+      { name: 'CSV Files', extensions: ['csv'] },
+      { name: 'Text Files', extensions: ['txt'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (!result.canceled && result.filePath) {
+    try {
+      const writeRes = await window.serialDebug.file.write(result.filePath, csvContent);
+      if (writeRes && writeRes.success) {
+        showToast('Waveform data exported successfully to ' + result.filePath, 'success');
+      } else {
+        showToast('Export failed: ' + (writeRes ? writeRes.error : 'Unknown error'), 'error');
+      }
+    } catch (err) {
+      showToast('Export failed: ' + err.message, 'error');
+    }
+  }
+}
 

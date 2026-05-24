@@ -152,7 +152,19 @@
               <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-clear">Clear</button>
               <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-screenshot">Screenshot</button>
               <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-config">Channels</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="btn-waveform-export">Export Data</button>
               <div class="tool-row" style="margin-top:4px"><label class="toggle-switch"><input type="checkbox" id="data-sampling"><span class="toggle-switch__track"></span></label><span class="text-sm">Sample every</span><input type="number" id="data-sample-rate" style="width:40px" value="2" min="2" max="100"><span class="text-xs text-muted">pts</span></div>
+              <div class="tool-row" style="margin-top:4px"><label class="toggle-switch"><input type="checkbox" id="waveform-cursors-toggle"><span class="toggle-switch__track"></span></label><span class="text-sm">Cursors (Δt/ΔV)</span></div>
+              <div class="tool-row" style="margin-top:4px"><label class="toggle-switch"><input type="checkbox" id="waveform-sync-timebase" checked><span class="toggle-switch__track"></span></label><span class="text-sm">Sync Timebase</span></div>
+            </div>
+          </div>
+          <div class="left-panel__section"><h3 class="left-panel__title">SCOPE TRIGGER</h3>
+            <div class="tool-group">
+              <div class="tool-row"><label class="toggle-switch"><input type="checkbox" id="trigger-enabled"><span class="toggle-switch__track"></span></label><span class="text-sm">Enabled</span></div>
+              <div class="form-field"><label class="form-field__label">Source</label><select id="trigger-source"><option value="CH1">CH1</option></select></div>
+              <div class="form-field"><label class="form-field__label">Mode</label><div class="segmented segmented--full" id="trigger-mode"><button class="segmented__btn active" data-mode="auto">Auto</button><button class="segmented__btn" data-mode="normal">Normal</button></div></div>
+              <div class="form-field"><label class="form-field__label">Slope</label><div class="segmented segmented--full" id="trigger-slope"><button class="segmented__btn active" data-mode="rising">Rising</button><button class="segmented__btn" data-mode="falling">Falling</button></div></div>
+              <div class="form-field"><label class="form-field__label">Level</label><input type="number" id="trigger-level" value="0.0" step="0.5"></div>
             </div>
           </div>
           <div class="left-panel__section"><h3 class="left-panel__title">MATH CHANNELS</h3>
@@ -284,6 +296,36 @@
                   </div>
                 </div>
               </div>
+              <!-- Floating Cursors Readout -->
+              <div id="cursor-readout" class="cursor-readout hidden">
+                <div class="cursor-readout__title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <span>Cursor Measurements</span>
+                </div>
+                <div class="cursor-readout__content">
+                  <div class="cursor-readout__row">
+                    <span class="lbl" style="color: rgba(239, 68, 68, 0.95); font-weight: 600;">Cursor A:</span>
+                    <span id="cur-a-val" class="val font-mono">--</span>
+                  </div>
+                  <div class="cursor-readout__row">
+                    <span class="lbl" style="color: rgba(59, 130, 246, 0.95); font-weight: 600;">Cursor B:</span>
+                    <span id="cur-b-val" class="val font-mono">--</span>
+                  </div>
+                  <div class="cursor-readout__divider"></div>
+                  <div class="cursor-readout__row highlight">
+                    <span class="lbl">Δt (Time):</span>
+                    <span id="cur-delta-t" class="val font-mono">--</span>
+                  </div>
+                  <div class="cursor-readout__row highlight">
+                    <span class="lbl">ΔV (Value):</span>
+                    <span id="cur-delta-v" class="val font-mono">--</span>
+                  </div>
+                  <div class="cursor-readout__row highlight">
+                    <span class="lbl">Freq (1/Δt):</span>
+                    <span id="cur-freq" class="val font-mono">--</span>
+                  </div>
+                </div>
+              </div>
               <!-- Wave Send Panel -->
               <div class="send-panel wave-send-panel">
                 <div class="send-panel__row">
@@ -384,6 +426,31 @@
                     <label class="form-field__label">Theme Name</label>
                     <input type="text" id="custom-theme-name" placeholder="My custom theme" value="My Theme">
                   </div>
+                  
+                  <div class="theme-preview-panel">
+                    <h4 class="settings-section__subtitle" style="margin-top: 12px; margin-bottom: 6px;">Live Preview & Accent Harmony</h4>
+                    <div class="theme-preview-elements">
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                        <button class="btn btn-primary" style="pointer-events: none; border-radius: 4px; height: 20px; font-size: 10px; padding: 0 8px; width: auto; line-height: 1;">Sample Button</button>
+                        <span style="background: var(--accent); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Active Badge</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="text" value="Sample Input Field..." style="flex: 1; pointer-events: none; height: 24px; font-size: 11px; padding: 0 8px; margin: 0; background: var(--bg-input); border-color: var(--border-strong); color: var(--text-primary);" readonly>
+                        <div class="status-dot connected" style="width: 8px; height: 8px; flex-shrink: 0;"></div>
+                      </div>
+                      <div style="padding: 6px; border-radius: 4px; background: var(--bg-tertiary); border: 1px solid var(--border-strong); font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); word-break: break-all;">
+                        [15:19:42] RX: 02 03 04 00 00 00 A1
+                      </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                      <span class="form-field__label" style="margin-bottom: 4px; font-size: 9px;">Color Harmonies (Click to Apply Accent):</span>
+                      <div style="display: flex; justify-content: space-between; gap: 6px;" id="harmony-palette">
+                        <!-- Populated dynamically via JS -->
+                      </div>
+                    </div>
+                  </div>
+
                   <button class="btn btn-primary btn-sm btn-block" id="btn-theme-save" style="margin-top:8px">Save Custom Theme</button>
                 </div>
                 <div style="display:flex; gap:6px; margin-top:8px">

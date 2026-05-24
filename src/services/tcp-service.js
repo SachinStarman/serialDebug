@@ -83,7 +83,7 @@ class TcpService {
     if (this.server) {
       this.serverClients.forEach(c => c.destroy());
       this.serverClients = [];
-      return new Promise((resolve) => {
+      await new Promise((resolve) => {
         this.server.close(() => {
           this.server = null;
           resolve();
